@@ -1,11 +1,12 @@
 import os
 from functools import wraps
-from flask import Flask, request, render_template, jsonify, redirect, url_for, g
+from flask import Flask, request, render_template, jsonify, g
 from supabase import create_client, Client
 import jwt
 from dotenv import load_dotenv
+import requests
 
-# Load environment variables for local testing
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -17,6 +18,7 @@ supabase: Client = create_client(supabase_url, supabase_key)
 
 # JWT Secret for server-side token validation
 JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
+INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "super-secret-gateway-token")
 
 def get_template_context():
     return {
@@ -24,16 +26,7 @@ def get_template_context():
         'supabase_key': supabase_key
     }
 
-@app.route('/auth/callback')
-def auth_callback():
-    # Renders the auth page so the Supabase JS client can parse the 
-    # #access_token fragment in the URL and trigger the redirect to /dashboard
-    return render_template('auth.html', **get_template_context())
-
-
-
-
-# --- DECORATORS (The Security Layer) ---
+# --- SECURITY DECORATORS ---
 
 def require_api_key(f):
     @wraps(f)
@@ -42,38 +35,13 @@ def require_api_key(f):
         if not api_key:
             return jsonify({"error": "Missing API Key header: X-API-Key"}), 401
         
-        # Check if the API key exists in your Supabase 'api_keys' table
-        response = supabase.table('api_keys').select('app_id').eq('api_key', api_key).execute()
+        # Validate API key from MeteorBase api_keys table
+        response = supabase.table('api_keys').select('user_id').eq('api_key', api_key).execute()
         if not response.data:
             return jsonify({"error": "Invalid API Key"}), 403
         
-        # Inject the App ID into Flask's global context
-        g.app_id = response.data[0]['app_id']
-        return f(*args, **kwargs)
-    return decorated
-
-def require_jwt(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"error": "Missing or invalid Authorization header"}), 401
-        
-        token = auth_header.split(" ")[1]
-        try:
-            # Decode and verify the JWT offline using your Supabase secret
-            payload = jwt.decode(
-                token, 
-                JWT_SECRET, 
-                algorithms=["HS256"], 
-                audience="authenticated"
-            )
-            g.user_id = payload['sub']
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "User session has expired. Please log in again."}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"error": "Invalid authentication token."}), 401
-            
+        # Inject verified user_id into Flask global context
+        g.user_id = response.data[0]['user_id']
         return f(*args, **kwargs)
     return decorated
 
@@ -87,48 +55,69 @@ def home():
 def auth():
     return render_template('auth.html', **get_template_context())
 
+@app.route('/auth/callback')
+def auth_callback():
+    return render_template('auth.html', **get_template_context())
+
 @app.route('/dashboard')
 def dashboard():
     return render_template('dashboard.html', **get_template_context())
 
-# --- SECURE API ENDPOINTS ---
+# --- SYSTEM HEALTH ---
 
 @app.route('/ping')
 def ping():
     try:
-        # Keep-alive query for UptimeRobot
         supabase.table('profiles').select('id').limit(1).execute()
         return "OK - Render and Supabase are both awake!", 200
     except Exception as e:
         return f"Database error: {str(e)}", 500
 
-@app.route('/api/v1/notes', methods=['GET'])
-@require_api_key
-@require_jwt
-def get_notes():
-    # Fetch notes filtered by both App ID and User ID
-    response = supabase.table('notes') \
-        .select('*') \
-        .eq('app_id', g.app_id) \
-        .eq('user_id', g.user_id) \
-        .execute()
-    return jsonify({"notes": response.data}), 200
+# --- THE UNIVERSAL API GATEWAY PROXY ---
+# Dynamically routes any request to /api/v1/<app_name>/<path:endpoint> 
+# to the corresponding registered microservice.
 
-@app.route('/api/v1/notes', methods=['POST'])
+@app.route('/api/v1/<app_name>/<path:endpoint>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
 @require_api_key
-@require_jwt
-def create_note():
-    content = request.json.get('content')
-    if not content:
-        return jsonify({"error": "Note content is required"}), 400
+def api_gateway(app_name, endpoint):
+    try:
+        # 1. Look up the microservice URL dynamically from the Supabase 'services' table (managed via Admin Dashboard)
+        service_res = supabase.table('services').select('target_url', 'is_active').eq('name', app_name.lower()).execute()
         
-    data = {
-        "app_id": g.app_id,
-        "user_id": g.user_id,
-        "content": content
-    }
-    response = supabase.table('notes').insert(data).execute()
-    return jsonify({"status": "success", "note": response.data[0]}), 201
+        if not service_res.data or not service_res.data[0]['is_active']:
+            return jsonify({"error": f"Service '{app_name}' is unregistered, invalid, or inactive."}), 404
+            
+        target_base_url = service_res.data[0]['target_url'].rstrip('/')
+        target_url = f"{target_base_url}/{endpoint}"
+        
+        # 2. Build secure forward headers (trusting MB as the middleman)
+        headers = {
+            "Content-Type": request.headers.get("Content-Type", "application/json"),
+            "X-Internal-Secret": INTERNAL_SECRET,
+            "X-User-ID": g.user_id
+        }
+        
+        # Forward query parameters and request body
+        params = request.args
+        data = request.get_data()
+        
+        # 3. Proxy the request to the target app (e.g. Oblivion, VEX, SkipIDeate)
+        resp = requests.request(
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            params=params,
+            data=data,
+            timeout=15
+        )
+        
+        # 4. Pipe response back to the client
+        return (resp.content, resp.status_code, resp.headers.items())
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to communicate with service '{app_name}'.", "details": str(e)}), 502
+    except Exception as e:
+        return jsonify({"error": "Gateway routing exception.", "details": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -235,7 +235,6 @@
         const SUPABASE_ANON_KEY = '{{ supabase_key }}';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // UI Elements
         const loginTab = document.getElementById('loginTab');
         const signupTab = document.getElementById('signupTab');
         const loginForm = document.getElementById('loginForm');
@@ -249,11 +248,9 @@
 
         const statusMsg = document.getElementById('statusMsg');
 
-        // Status Message Handler (Success & Error)
         function showStatus(msg, type = 'error') {
             statusMsg.textContent = msg;
             statusMsg.classList.remove('hidden', 'bg-error/20', 'border-error', 'text-error', 'bg-secondary/20', 'border-secondary', 'text-secondary');
-            
             if (type === 'error') {
                 statusMsg.classList.add('bg-error/20', 'border-error', 'text-error');
             } else if (type === 'success') {
@@ -265,7 +262,6 @@
             statusMsg.classList.add('hidden');
         }
 
-        // --- TAB SWITCHING ---
         loginTab.addEventListener('click', () => {
             resetToStandardAuth();
             loginForm.classList.remove('hidden');
@@ -286,7 +282,6 @@
             loginTab.classList.add('text-on-surface-variant', 'border-transparent');
         });
 
-        // --- STANDARD AUTH (Password) ---
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             hideStatus();
@@ -294,9 +289,8 @@
             const password = document.getElementById('loginPassword').value;
 
             try {
-                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                const { error } = await supabase.auth.signInWithPassword({ email, password });
                 if (error) throw error;
-                // onAuthStateChange handles redirect
             } catch (err) {
                 showStatus(`Login failed: ${err.message}`, 'error');
             }
@@ -315,7 +309,7 @@
             }
 
             try {
-                const { data, error } = await supabase.auth.signUp({ email, password });
+                const { error } = await supabase.auth.signUp({ email, password });
                 if (error) throw error;
                 showStatus('Account created! Check your email to confirm.', 'success');
                 signupForm.reset();
@@ -324,10 +318,9 @@
             }
         });
 
-        // --- OAUTH ---
         document.getElementById('googleBtn').addEventListener('click', async () => {
             try {
-                const { data, error } = await supabase.auth.signInWithOAuth({
+                const { error } = await supabase.auth.signInWithOAuth({
                     provider: 'google',
                     options: { redirectTo: `${window.location.origin}/auth/callback` }
                 });
@@ -339,7 +332,7 @@
 
         document.getElementById('githubBtn').addEventListener('click', async () => {
             try {
-                const { data, error } = await supabase.auth.signInWithOAuth({
+                const { error } = await supabase.auth.signInWithOAuth({
                     provider: 'github',
                     options: { redirectTo: `${window.location.origin}/auth/callback` }
                 });
@@ -349,16 +342,12 @@
             }
         });
 
-        // --- OTP MORPHING LOGIC ---
         document.getElementById('initiateOtpBtn').addEventListener('click', () => {
             hideStatus();
-            // Hide everything else
             loginForm.classList.add('hidden');
             signupForm.classList.add('hidden');
             socialContainer.classList.add('hidden');
             tabHeaders.classList.add('hidden');
-            
-            // Show OTP flow
             otpFlowContainer.classList.remove('hidden');
             morphToOtpEmail();
         });
@@ -368,8 +357,6 @@
             otpFlowContainer.classList.add('hidden');
             socialContainer.classList.remove('hidden');
             tabHeaders.classList.remove('hidden');
-            
-            // Default to showing login form if resetting
             if(loginTab.classList.contains('text-primary')) {
                 loginForm.classList.remove('hidden');
             } else {
@@ -384,7 +371,6 @@
             otpEmailStep.classList.remove('hidden');
         }
 
-        // 1. Send OTP
         document.getElementById('executeOtpBtn').addEventListener('click', async () => {
             hideStatus();
             const email = document.getElementById('targetOtpEmail').value.trim();
@@ -399,11 +385,9 @@
             btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span> TRANSMITTING...';
 
             try {
-                const { data, error } = await supabase.auth.signInWithOtp({ email });
+                const { error } = await supabase.auth.signInWithOtp({ email });
                 if (error) throw error;
-                
                 showStatus('Transmission successful. Check your inbox.', 'success');
-                // Morph to Code Input
                 otpEmailStep.classList.add('hidden');
                 otpCodeStep.classList.remove('hidden');
             } catch (err) {
@@ -414,7 +398,6 @@
             }
         });
 
-        // 2. Verify OTP
         document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
             hideStatus();
             const email = document.getElementById('targetOtpEmail').value.trim();
@@ -430,14 +413,8 @@
             btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span> VERIFYING...';
 
             try {
-                const { data, error } = await supabase.auth.verifyOtp({
-                    email,
-                    token,
-                    type: 'email'
-                });
-                
+                const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
                 if (error) throw error;
-                // Success triggers onAuthStateChange below automatically
             } catch (err) {
                 showStatus(`Invalid Code: ${err.message}`, 'error');
                 btn.disabled = false;
@@ -445,17 +422,13 @@
             }
         });
 
-        // --- GLOBAL SESSION LISTENER ---
         supabase.auth.onAuthStateChange((event, session) => {
             if (session && event === 'SIGNED_IN') {
                 const userEmail = session.user.email;
-                
                 showStatus("AUTHENTICATION CONFIRMED. REDIRECTING...", 'success');
 
-                // ADMIN ROLE CHECK
                 if (userEmail === 'info.cometlabs@gmail.com') {
                     localStorage.setItem('role', 'ADMIN');
-                    console.log("Admin privileges granted.");
                 } else {
                     localStorage.setItem('role', 'USER');
                 }

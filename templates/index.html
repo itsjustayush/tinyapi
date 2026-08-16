@@ -1,63 +1,422 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Note API</title>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
-        textarea { width: 100%; height: 80px; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        ul { list-style-type: none; padding: 0; }
-        li { background: #f9f9f9; margin: 8px 0; padding: 12px; border-radius: 6px; border: 1px solid #eee; }
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CORE BRAIN Landing Page</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&amp;family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface-variant": "#cbc3d7",
+                      "on-secondary-fixed": "#001f25",
+                      "primary-fixed": "#e9ddff",
+                      "on-tertiary": "#620040",
+                      "surface": "#131313",
+                      "on-primary": "#3c0091",
+                      "on-tertiary-fixed": "#3d0026",
+                      "on-tertiary-container": "#560038",
+                      "secondary-fixed": "#a2eeff",
+                      "outline-variant": "#494454",
+                      "error": "#ffb4ab",
+                      "primary": "#d0bcff",
+                      "error-container": "#93000a",
+                      "surface-tint": "#d0bcff",
+                      "surface-container-highest": "#353534",
+                      "outline": "#958ea0",
+                      "surface-container-high": "#2a2a2a",
+                      "on-secondary": "#00363e",
+                      "inverse-surface": "#e5e2e1",
+                      "inverse-on-surface": "#313030",
+                      "tertiary-container": "#e364a7",
+                      "surface-container-low": "#1c1b1b",
+                      "on-secondary-container": "#00515d",
+                      "tertiary-fixed": "#ffd8e7",
+                      "secondary-fixed-dim": "#2fd9f4",
+                      "on-background": "#e5e2e1",
+                      "on-primary-container": "#340080",
+                      "surface-dim": "#131313",
+                      "tertiary-fixed-dim": "#ffafd3",
+                      "on-tertiary-fixed-variant": "#85145a",
+                      "inverse-primary": "#6d3bd7",
+                      "surface-bright": "#3a3939",
+                      "on-error-container": "#ffdad6",
+                      "secondary-container": "#00cbe6",
+                      "on-error": "#690005",
+                      "surface-variant": "#353534",
+                      "on-primary-fixed-variant": "#5516be",
+                      "on-secondary-fixed-variant": "#004e5a",
+                      "on-surface": "#e5e2e1",
+                      "surface-container": "#201f1f",
+                      "background": "#131313",
+                      "primary-container": "#a078ff",
+                      "secondary": "#5de6ff",
+                      "surface-container-lowest": "#0e0e0e",
+                      "primary-fixed-dim": "#d0bcff",
+                      "on-primary-fixed": "#23005c",
+                      "tertiary": "#ffafd3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin": "32px",
+                      "unit": "4px",
+                      "container-max": "1440px",
+                      "gutter": "24px"
+              },
+              "fontFamily": {
+                      "label-caps": ["Space Mono"],
+                      "code-md": ["Space Mono"],
+                      "body-md": ["Sora"],
+                      "headline-xl": ["Sora"],
+                      "headline-lg-mobile": ["Sora"],
+                      "headline-lg": ["Sora"]
+              },
+              "fontSize": {
+                      "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                      "code-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "body-md": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                      "headline-xl": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body {
+            background-color: theme('colors.surface');
+            color: theme('colors.on-surface');
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(26, 26, 26, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .brutalist-border {
+            border: 2px solid theme('colors.outline-variant');
+        }
+
+        .neon-glow-cyan {
+            box-shadow: 0 0 15px rgba(93, 230, 255, 0.2);
+        }
+        
+        .neon-glow-cyan:hover {
+             box-shadow: 0 0 20px rgba(93, 230, 255, 0.5);
+             border-color: theme('colors.secondary');
+        }
+
+        .neon-glow-violet {
+            box-shadow: 0 0 15px rgba(208, 188, 255, 0.2);
+        }
+
+        .cyan-text-glow {
+            text-shadow: 0 0 10px rgba(93, 230, 255, 0.5);
+        }
+
+        .noise-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.02;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+        
+        .scanline-header {
+             position: relative;
+        }
+        
+        .scanline-header::before {
+             content: "";
+             position: absolute;
+             top: 0; left: 0; right: 0; bottom: 0;
+             background: linear-gradient(to bottom, transparent 50%, rgba(255,255,255,0.05) 51%);
+             background-size: 100% 4px;
+             pointer-events: none;
+             z-index: 10;
+        }
+
+        .parallax-item {
+            will-change: transform;
+        }
     </style>
 </head>
-<body>
-    <h1>My Notes</h1>
-    
-    <textarea id="noteInput" placeholder="Write a new note here..."></textarea>
-    <button onclick="addNote()">Save Note</button>
+<body class="antialiased min-h-screen relative font-body-md text-body-md">
+<div class="noise-overlay"></div>
+<div class="fixed inset-0 w-full h-full -z-10 opacity-40" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_21" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_21');
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
 
-    <h2>Saved Notes</h2>
-    <ul id="notesList"></ul>
-
-    <script>
-        // Fetch notes from the API and display them
-        async function fetchNotes() {
-            const response = await fetch('/api/notes');
-            const data = await response.json();
-            const list = document.getElementById('notesList');
-            list.innerHTML = '';
-            
-            data.notes.forEach(note => {
-                const li = document.createElement('li');
-                li.textContent = note;
-                list.appendChild(li);
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+float noise(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+void main() {
+    vec2 uv = v_texCoord;
+    float time = u_time * 0.5;
+    vec3 color1 = vec3(0.03, 0.03, 0.05);
+    vec3 color2 = vec3(0.54, 0.36, 1.0);
+    vec3 color3 = vec3(0.13, 0.82, 0.93);
+    float n = noise(uv * 10.0 + time);
+    float glow = smoothstep(0.4, 0.5, n * sin(time + uv.x * 5.0));
+    vec3 finalColor = mix(color1, color2 * 0.2, uv.y);
+    finalColor += glow * color3 * 0.15;
+    float scanline = sin(uv.y * 800.0) * 0.04;
+    finalColor -= scanline;
+    gl_FragColor = vec4(finalColor, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<nav class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/20 hidden md:flex">
+<div class="flex justify-between items-center px-margin py-4 max-w-container-max mx-auto w-full">
+<div class="flex items-center gap-8">
+<span class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary">CORE BRAIN</span>
+<div class="flex items-center gap-6">
+<a class="text-primary font-bold border-b-2 border-primary pb-1" href="#">Architecture</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">API Gateway</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">Auth</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">Docs</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="font-code-md text-code-md text-secondary border border-outline-variant px-4 py-2 hover:border-secondary hover:bg-secondary/10 transition-colors brutalist-border">System Status</button>
+<a href="/auth" class="bg-primary text-on-primary font-label-caps text-label-caps px-6 py-3 hover:bg-primary-fixed-dim transition-colors active:scale-95 neon-glow-violet brutalist-border uppercase font-bold">Launch Console</a>
+</div>
+</div>
+</nav>
+<nav class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-outline-variant/20 md:hidden flex justify-between items-center px-4 py-4">
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tighter text-primary">CORE BRAIN</span>
+<button class="text-primary"><span class="material-symbols-outlined">menu</span></button>
+</nav>
+<main class="pt-32 md:pt-48 pb-24 px-margin max-w-container-max mx-auto flex flex-col gap-32">
+<section class="relative min-h-[70vh] flex flex-col md:flex-row items-center justify-between gap-12 parallax-container">
+<div class="flex-1 flex flex-col gap-8 z-10 parallax-item" data-speed="0.2">
+<h1 class="font-label-caps text-label-caps text-secondary tracking-[0.2em] uppercase cyan-text-glow">Terminal Operations</h1>
+<h2 class="font-headline-xl text-headline-xl text-on-surface max-w-2xl leading-tight">The Central Intelligence for Your Entire App Ecosystem.</h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-xl">Deploy, scale, and secure your backend infrastructure with terminal-level precision. A unified BaaS environment designed for protocol architects.</p>
+<div class="flex gap-4 mt-4">
+<a href="/auth" class="bg-primary text-on-primary font-label-caps text-label-caps px-8 py-4 hover:bg-primary-fixed-dim transition-colors active:scale-95 neon-glow-violet brutalist-border uppercase font-bold flex items-center gap-2">Initialize Core <span class="material-symbols-outlined text-[18px]">terminal</span></a>
+<button class="font-code-md text-code-md text-on-surface border border-outline-variant px-8 py-4 hover:border-secondary hover:text-secondary transition-colors brutalist-border bg-surface-container-low/50 backdrop-blur-sm">View Documentation</button>
+</div>
+</div>
+<div class="flex-1 w-full relative h-[400px] md:h-[600px] flex items-center justify-center z-0 parallax-item" data-speed="-0.1">
+<div class="absolute inset-0 w-full h-full" style="display:block;">
+<script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
+<div id="threejs-container-ANIMATION_22" style="width:100%;height:100%"></div>
+<script>
+(function() {
+  const container = document.getElementById('threejs-container-ANIMATION_22');
+  const scene = new THREE.Scene();
+const width = container.clientWidth || window.innerWidth;
+const height = container.clientHeight || window.innerHeight;
+const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+renderer.setSize(width, height);
+renderer.setPixelRatio(window.devicePixelRatio);
+container.appendChild(renderer.domElement);
+const group = new THREE.Group();
+scene.add(group);
+const material = new THREE.MeshPhongMaterial({
+    color: 0x8b5cf6,
+    emissive: 0x22d3ee,
+    emissiveIntensity: 0.5,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.6
+});
+const coreGeo = new THREE.IcosahedronGeometry(1.5, 2);
+const core = new THREE.Mesh(coreGeo, material);
+group.add(core);
+const nodeCount = 40;
+for (let i = 0; i < nodeCount; i++) {
+    const nodeGeo = new THREE.SphereGeometry(0.05, 8, 8);
+    const nodeMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee });
+    const node = new THREE.Mesh(nodeGeo, nodeMat);
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 2 + Math.random() * 2;
+    node.position.set(Math.cos(angle) * radius, (Math.random() - 0.5) * 3, Math.sin(angle) * radius);
+    group.add(node);
+}
+const light = new THREE.PointLight(0xffffff, 1, 100);
+light.position.set(5, 5, 5);
+scene.add(light);
+const ambient = new THREE.AmbientLight(0x404040);
+scene.add(ambient);
+camera.position.z = 7;
+function animate() {
+    requestAnimationFrame(animate);
+    group.rotation.y += 0.002;
+    group.rotation.x += 0.001;
+    const scale = 1 + Math.sin(Date.now() * 0.002) * 0.05;
+    core.scale.set(scale, scale, scale);
+    renderer.render(scene, camera);
+}
+window.addEventListener('resize', () => {
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+animate();
+})();
+</script>
+</div>
+<div class="absolute inset-4 border border-secondary/20 rounded-full pointer-events-none border-dashed animate-spin-slow" style="animation: spin 20s linear infinite;"></div>
+</div>
+</section>
+<section class="flex flex-col gap-12 z-10">
+<div class="flex flex-col gap-4">
+<h3 class="font-label-caps text-label-caps text-secondary uppercase tracking-widest flex items-center gap-2"><span class="w-8 h-[2px] bg-secondary"></span> System Architecture</h3>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Integrated Control Systems</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-[minmax(300px,auto)]">
+<div class="md:col-span-8 glass-panel brutalist-border p-8 flex flex-col justify-between group hover:border-secondary/50 transition-colors relative overflow-hidden">
+<div class="scanline-header absolute top-0 left-0 right-0 h-16 opacity-50"></div>
+<div class="flex justify-between items-start z-10 relative">
+<div class="w-12 h-12 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center"><span class="material-symbols-outlined text-secondary">account_tree</span></div>
+<span class="font-code-md text-code-md text-outline-variant">MOD_01</span>
+</div>
+<div class="flex flex-col gap-4 mt-12 z-10 relative">
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Multi-Tenant Gateway</h4>
+<p class="text-on-surface-variant font-code-md text-code-md leading-relaxed">A high-throughput API gateway engineered to route, authenticate, and rate-limit millions of requests across distinct tenant environments automatically.</p>
+</div>
+<div class="absolute -bottom-20 -right-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all"></div>
+</div>
+<div class="md:col-span-4 glass-panel brutalist-border p-8 flex flex-col justify-between group hover:border-secondary/50 transition-colors relative overflow-hidden bg-surface-container-low">
+<div class="flex justify-between items-start z-10 relative">
+<div class="w-12 h-12 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center"><span class="material-symbols-outlined text-secondary">key</span></div>
+</div>
+<div class="flex flex-col gap-4 mt-12 z-10 relative">
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface group-hover:text-secondary transition-colors">Hybrid Auth</h4>
+<p class="text-on-surface-variant font-code-md text-code-md text-sm">Dual-layer security combining stateful JWT sessions with high-speed, verifiable API Keys for headless machine-to-machine operations.</p>
+</div>
+</div>
+<div class="md:col-span-12 glass-panel brutalist-border p-8 flex flex-col md:flex-row items-center justify-between gap-8 group hover:border-primary/50 transition-colors bg-surface-container-low/80">
+<div class="flex flex-col gap-4 flex-1">
+<div class="flex items-center gap-3">
+<div class="w-2 h-8 bg-primary"></div>
+<h4 class="font-headline-lg text-headline-lg text-on-surface">Public Developer Hub</h4>
+</div>
+<p class="text-on-surface-variant font-code-md text-code-md leading-relaxed max-w-2xl">Auto-generate interactive Swagger/OpenAPI documentation directly from your deployed services. Provide external developers with SDKs, endpoint testing, and usage analytics instantly.</p>
+</div>
+<div class="w-full md:w-[400px] h-[200px] bg-surface border border-outline-variant rounded p-4 flex flex-col gap-2 font-code-md text-code-md text-xs overflow-hidden relative">
+<div class="text-outline-variant mb-2">// Initialize Client</div>
+<div class="text-secondary">const core = new CoreBrain({</div>
+<div class="text-primary pl-4">apiKey: process.env.CORE_KEY,</div>
+<div class="text-primary pl-4">environment: 'production'</div>
+<div class="text-secondary">});</div>
+<div class="text-outline-variant mt-2">// Fetch Analytics</div>
+<div class="text-on-surface">await core.gateway.getMetrics();</div>
+<div class="w-2 h-4 bg-secondary mt-1 animate-pulse"></div>
+</div>
+</div>
+</section>
+</main>
+<footer class="w-full py-12 bg-surface border-t border-outline-variant/10 relative z-10 mt-12">
+<div class="flex flex-col md:flex-row justify-between items-center px-margin max-w-container-max mx-auto gap-6">
+<span class="font-label-caps text-label-caps text-on-surface">© 2024 CORE BRAIN TERMINAL. ALL RIGHTS RESERVED.</span>
+<div class="flex gap-6 font-code-md text-code-md">
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-all" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-all" href="#">Terms of Service</a>
+<a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-all" href="#">Security Whitepaper</a>
+</div>
+</div>
+</footer>
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const parallaxItems = document.querySelectorAll('.parallax-item');
+            window.addEventListener('scroll', () => {
+                const scrolled = window.scrollY;
+                parallaxItems.forEach(item => {
+                    const speed = item.getAttribute('data-speed');
+                    const yPos = -(scrolled * speed);
+                    item.style.transform = `translateY(${yPos}px)`;
+                });
             });
-        }
-
-        // Send a new note to the API
-        async function addNote() {
-            const noteInput = document.getElementById('noteInput');
-            const noteText = noteInput.value.trim();
-            
-            if (!noteText) return alert("Please enter a note!");
-
-            const response = await fetch('/api/notes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note: noteText })
-            });
-
-            if (response.ok) {
-                noteInput.value = '';
-                fetchNotes(); // Refresh the list
-            }
-        }
-
-        // Load notes on startup
-        fetchNotes();
+        });
     </script>
-</body>
+</body></html>
 </html>

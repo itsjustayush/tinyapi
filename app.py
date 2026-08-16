@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, redirect, url_for
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -16,10 +16,34 @@ supabase: Client = create_client(supabase_url, supabase_key)
 # In-memory list to store notes (resets if the server restarts)
 notes = []
 
+# Pass Supabase credentials to templates for client-side auth
+def get_template_context():
+    return {
+        'supabase_url': supabase_url,
+        'supabase_key': supabase_key
+    }
+
 @app.route('/')
 def home():
-    # Renders the HTML frontend
+    # Renders the landing page
     return render_template('index.html')
+
+@app.route('/auth')
+def auth():
+    # Renders the auth page with Supabase credentials
+    return render_template('auth.html', **get_template_context())
+
+@app.route('/dashboard')
+def dashboard():
+    # Renders the dashboard page
+    return render_template('dashboard.html', **get_template_context())
+
+@app.route('/auth/callback')
+def auth_callback():
+    # OAuth callback handler for Supabase
+    # Supabase redirects here after OAuth authentication
+    # The client-side JS handles the token management
+    return redirect(url_for('dashboard'))
 
 @app.route('/api/notes', methods=['GET', 'POST'])
 def handle_notes():

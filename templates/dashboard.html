@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>CORE BRAIN - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface-variant": "#cbc3d7",
+                        "primary": "#d0bcff",
+                        "surface": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "secondary": "#5de6ff",
+                        "surface-container-low": "#1c1b1b",
+                        "outline-variant": "#494454",
+                        "error": "#ffb4ab"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Space Mono"],
+                        "code-md": ["Space Mono"],
+                        "body-md": ["Sora"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .scanline { background: linear-gradient(to bottom, transparent 50%, rgba(255,255,255,0.02) 51%); background-size: 100% 4px; }
+        .noise-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; opacity: 0.02; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E"); }
+        .glow-cyan { text-shadow: 0 0 8px rgba(93,230,255,0.4); }
+        .box-glow-active { box-shadow: 0 0 12px -2px rgba(93,230,255,0.3); }
+        .glass-panel { background: rgba(19,19,19,0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-code-md text-code-md overflow-x-hidden selection:bg-secondary relative min-h-screen">
+<div class="noise-overlay"></div>
+<nav class="hidden md:flex bg-surface-container-low h-screen w-64 fixed left-0 top-0 border-r border-outline-variant/30 flex-col h-full py-6 z-40">
+    <div class="px-6 mb-12">
+        <h1 class="font-bold text-2xl text-primary tracking-widest mb-1 glow-cyan">CORE BRAIN</h1>
+        <p class="font-code-md text-[11px] text-on-surface-variant opacity-70 scanline px-1 inline-block">v1.0.4-stable</p>
+    </div>
+    <div class="px-4 mb-8">
+        <a href="/dashboard?action=new-app" class="w-full bg-primary text-surface font-bold py-3 px-4 rounded hover:bg-secondary hover:text-surface transition-all duration-300 flex items-center justify-center gap-2 group">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            New Service
+        </a>
+    </div>
+    <div class="flex-1 overflow-y-auto px-2 space-y-1">
+        <a class="flex items-center gap-3 text-secondary border-l-2 border-secondary bg-secondary/10 px-4 py-3 font-bold text-[11px] transition-all duration-300 box-glow-active" href="/dashboard">
+            <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+            Overview
+        </a>
+        <a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 font-bold text-[11px] hover:bg-surface-container-high hover:text-on-surface transition-all duration-300 border-l-2 border-transparent" href="/dashboard?section=apps">
+            <span class="material-symbols-outlined text-[20px]">apps</span>
+            Registered Apps
+        </a>
+        <a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 font-bold text-[11px] hover:bg-surface-container-high hover:text-on-surface transition-all duration-300 border-l-2 border-transparent" href="/dashboard?section=users">
+            <span class="material-symbols-outlined text-[20px]">group</span>
+            User Management
+        </a>
+        <a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 font-bold text-[11px] hover:bg-surface-container-high hover:text-on-surface transition-all duration-300 border-l-2 border-transparent" href="/dashboard?section=api">
+            <span class="material-symbols-outlined text-[20px]">api</span>
+            API Services
+        </a>
+    </div>
+    <div class="mt-auto px-2 space-y-1 border-t border-outline-variant/20 pt-4">
+        <a class="flex items-center gap-3 text-on-surface-variant px-4 py-3 font-bold text-[11px] hover:bg-surface-container-high hover:text-on-surface transition-all duration-300" href="#">
+            <span class="material-symbols-outlined text-[20px]">settings</span>
+            Settings
+        </a>
+        <button id="logoutBtn" class="w-full flex items-center gap-3 text-on-surface-variant px-4 py-3 font-bold text-[11px] hover:bg-surface-container-high hover:text-on-surface transition-all duration-300 text-left">
+            <span class="material-symbols-outlined text-[20px]">logout</span>
+            Logout
+        </button>
+    </div>
+</nav>
+
+<div class="md:ml-64 flex flex-col min-h-screen">
+    <header class="bg-surface/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-outline-variant/20 flex justify-between items-center px-6 py-4 md:w-[calc(100%-16rem)]">
+        <div class="flex items-center gap-6">
+            <button class="md:hidden text-on-surface-variant hover:text-primary transition-colors">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden sm:flex items-center gap-2 px-3 py-1 bg-surface-container-high border border-outline-variant/30 rounded">
+                <span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+                <span class="font-code-md text-[12px] text-on-surface-variant">System Status: NOMINAL</span>
+            </div>
+            <button id="userMenuBtn" class="bg-surface border border-outline-variant/50 text-on-surface px-4 py-2 font-bold text-[11px] rounded hover:border-primary hover:text-primary transition-colors">
+                User Menu
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 mt-24 px-6 max-w-6xl mx-auto w-full pb-20">
+        <div class="mb-8 border-b border-outline-variant/20 pb-4">
+            <h2 class="font-bold text-2xl text-on-surface glow-cyan">System Overview</h2>
+            <p class="font-code-md text-[13px] text-on-surface-variant mt-2 opacity-80">Real-time telemetry and architectural state.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Global Traffic Chart -->
+            <div class="lg:col-span-8 glass-panel border border-[#1F1F1F] rounded flex flex-col overflow-hidden">
+                <div class="p-4 border-b border-[#1F1F1F] scanline flex justify-between items-center bg-surface">
+                    <span class="font-bold text-[11px] text-on-surface tracking-widest">GLOBAL TRAFFIC [RX/TX]</span>
+                    <div class="flex gap-2">
+                        <span class="px-2 py-0.5 border border-outline-variant/30 text-[10px] font-code-md text-on-surface-variant rounded">1H</span>
+                        <span class="px-2 py-0.5 border border-secondary text-[10px] font-code-md text-secondary rounded bg-secondary/10">24H</span>
+                        <span class="px-2 py-0.5 border border-outline-variant/30 text-[10px] font-code-md text-on-surface-variant rounded">7D</span>
+                    </div>
+                </div>
+                <div class="p-6 flex-1 flex flex-col justify-end min-h-[300px] relative">
+                    <div class="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-10 pointer-events-none">
+                        <div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-white"></div>
+                        <div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-white"></div>
+                        <div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-r border-white"></div><div class="border-b border-white"></div>
+                        <div class="border-r border-white"></div><div class="border-r border-white"></div><div class="border-r border-white"></div><div class="border-r border-white"></div><div class="border-r border-white"></div><div></div>
+                    </div>
+                    <div class="flex justify-between items-end h-48 gap-2 relative z-10">
+                        <div class="w-full bg-primary/20 h-[30%] hover:bg-primary/40 transition-colors border-t border-primary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-primary transition-opacity">1.2k</div></div>
+                        <div class="w-full bg-secondary/20 h-[45%] hover:bg-secondary/40 transition-colors border-t border-secondary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-secondary transition-opacity">2.1k</div></div>
+                        <div class="w-full bg-primary/20 h-[20%] hover:bg-primary/40 transition-colors border-t border-primary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-primary transition-opacity">0.8k</div></div>
+                        <div class="w-full bg-secondary/20 h-[60%] hover:bg-secondary/40 transition-colors border-t border-secondary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-secondary transition-opacity">3.4k</div></div>
+                        <div class="w-full bg-primary/20 h-[80%] hover:bg-primary/40 transition-colors border-t border-primary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-primary transition-opacity">4.2k</div></div>
+                        <div class="w-full bg-secondary/20 h-[50%] hover:bg-secondary/40 transition-colors border-t border-secondary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-secondary transition-opacity">2.8k</div></div>
+                        <div class="w-full bg-primary/20 h-[90%] hover:bg-primary/40 transition-colors border-t border-primary relative group"><div class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 font-code-md text-[10px] bg-surface px-1 text-primary transition-opacity">5.1k</div></div>
+                    </div>
+                    <div class="flex justify-between mt-4 font-code-md text-[10px] text-on-surface-variant opacity-60 border-t border-[#1F1F1F] pt-2">
+                        <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>24:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Management -->
+            <div class="lg:col-span-4 glass-panel border border-[#1F1F1F] rounded flex flex-col">
+                <div class="p-4 border-b border-[#1F1F1F] scanline bg-surface flex items-center justify-between">
+                    <span class="font-bold text-[11px] text-on-surface tracking-widest">KEY MANAGEMENT</span>
+                    <span class="material-symbols-outlined text-secondary text-[18px]">key</span>
+                </div>
+                <div class="p-6 flex flex-col gap-4 flex-1">
+                    <div class="bg-[#080808] p-4 border border-[#1F1F1F] rounded relative overflow-hidden group">
+                        <div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <label class="font-bold text-[10px] text-on-surface-variant mb-2 block">ROOT MASTER KEY</label>
+                        <div class="flex items-center justify-between">
+                            <code class="font-code-md text-[12px] text-primary" id="apiKeyDisplay">sk_live_***8x9f</code>
+                            <button id="copyKeyBtn" class="text-on-surface-variant hover:text-white"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+                        </div>
+                    </div>
+                    <div class="bg-[#080808] p-4 border border-[#1F1F1F] rounded relative overflow-hidden group">
+                        <div class="absolute inset-0 bg-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <label class="font-bold text-[10px] text-on-surface-variant mb-2 block">ROTATE SCHEDULE</label>
+                        <div class="flex items-center justify-between">
+                            <span class="font-code-md text-[12px] text-secondary">T-MINUS 14 DAYS</span>
+                            <span class="px-2 py-0.5 border border-secondary text-[10px] font-code-md text-secondary rounded">AUTO</span>
+                        </div>
+                    </div>
+                    <button id="generateKeyBtn" class="mt-auto w-full py-3 border border-secondary text-secondary font-bold text-[11px] rounded hover:bg-secondary/10 transition-colors bg-transparent">
+                        GENERATE NEW PAIR
+                    </button>
+                </div>
+            </div>
+
+            <!-- Active Tenants -->
+            <div class="lg:col-span-6 glass-panel border border-[#1F1F1F] rounded flex flex-col">
+                <div class="p-4 border-b border-[#1F1F1F] scanline bg-surface flex justify-between items-center">
+                    <span class="font-bold text-[11px] text-on-surface tracking-widest">ACTIVE TENANTS</span>
+                    <span class="font-code-md text-[12px] text-on-surface-variant">TOTAL: <span id="appCount">0</span></span>
+                </div>
+                <div class="p-0 overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-[#1F1F1F] bg-[#080808]">
+                                <th class="p-4 font-bold text-[10px] text-on-surface-variant">APP ID</th>
+                                <th class="p-4 font-bold text-[10px] text-on-surface-variant">STATUS</th>
+                                <th class="p-4 font-bold text-[10px] text-on-surface-variant text-right">REQ/SEC</th>
+                            </tr>
+                        </thead>
+                        <tbody class="font-code-md text-[12px]" id="tenantsTable">
+                            <tr class="border-b border-[#1F1F1F] hover:bg-surface-container-high transition-colors cursor-pointer">
+                                <td class="p-4 text-on-surface">tnt_x9f2k1</td>
+                                <td class="p-4"><span class="inline-block w-2 h-2 rounded-full bg-secondary mr-2"></span><span class="text-secondary">HEALTHY</span></td>
+                                <td class="p-4 text-right text-on-surface-variant">4,201</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Security Events -->
+            <div class="lg:col-span-6 glass-panel border border-[#1F1F1F] rounded flex flex-col">
+                <div class="p-4 border-b border-[#1F1F1F] scanline bg-surface flex justify-between items-center">
+                    <span class="font-bold text-[11px] text-on-surface tracking-widest">SECURITY EVENTS (JWT)</span>
+                    <button class="text-on-surface-variant hover:text-white"><span class="material-symbols-outlined text-[16px]">filter_list</span></button>
+                </div>
+                <div class="p-4 flex-1 bg-[#080808] overflow-y-auto font-code-md text-[11px] leading-relaxed">
+                    <div class="flex gap-4 mb-2 border-b border-[#1F1F1F] pb-2">
+                        <span class="text-on-surface-variant opacity-50 w-20">10:42:01</span>
+                        <span class="text-secondary">[VERIFIED]</span>
+                        <span class="text-on-surface">Token signature valid for tnt_x9f2k1.</span>
+                    </div>
+                    <div class="flex gap-4 mb-2 border-b border-[#1F1F1F] pb-2">
+                        <span class="text-on-surface-variant opacity-50 w-20">10:41:55</span>
+                        <span class="text-error">[REJECTED]</span>
+                        <span class="text-on-surface">Expired payload attempt from IP 192.168.1.44</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-surface w-full py-12 border-t border-outline-variant/10 flex flex-col md:flex-row justify-between items-center px-6 max-w-6xl mx-auto md:w-[calc(100%-16rem)] ml-auto">
+        <div class="font-bold text-[11px] text-on-surface mb-4 md:mb-0">© 2024 CORE BRAIN TERMINAL. ALL RIGHTS RESERVED.</div>
+        <div class="flex gap-6 font-code-md text-[12px]">
+            <a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Privacy Policy</a>
+            <a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Terms of Service</a>
+            <a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-opacity" href="#">Security Whitepaper</a>
+        </div>
+    </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.0"></script>
+
+<script>
+    const SUPABASE_URL = '{{ supabase_url }}';
+    const SUPABASE_ANON_KEY = '{{ supabase_key }}';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Check authentication
+    supabase.auth.onAuthStateChange((event, session) => {
+        if (!session) {
+            window.location.href = '/auth';
+        }
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.href = '/';
+    });
+
+    // Copy API Key
+    document.getElementById('copyKeyBtn').addEventListener('click', () => {
+        const keyDisplay = document.getElementById('apiKeyDisplay');
+        navigator.clipboard.writeText(keyDisplay.textContent);
+        alert('API Key copied!');
+    });
+
+    // Load user data on page load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+            console.log('User:', session.user.email);
+        }
+    });
+</script>
+</body>
+</html>

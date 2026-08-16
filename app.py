@@ -1,123 +1,333 @@
-import os
-from functools import wraps
-from flask import Flask, request, render_template, jsonify, g
-from supabase import create_client, Client
-import jwt
-from dotenv import load_dotenv
-import requests
-
-# Load environment variables
-load_dotenv()
-
-app = Flask(__name__)
-
-# Initialize Supabase
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(supabase_url, supabase_key)
-
-# JWT Secret for server-side token validation
-JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
-INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "super-secret-gateway-token")
-
-def get_template_context():
-    return {
-        'supabase_url': supabase_url,
-        'supabase_key': supabase_key
-    }
-
-# --- SECURITY DECORATORS ---
-
-def require_api_key(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        api_key = request.headers.get('X-API-Key')
-        if not api_key:
-            return jsonify({"error": "Missing API Key header: X-API-Key"}), 401
-        
-        # Validate API key from MeteorBase api_keys table
-        response = supabase.table('api_keys').select('user_id').eq('api_key', api_key).execute()
-        if not response.data:
-            return jsonify({"error": "Invalid API Key"}), 403
-        
-        # Inject verified user_id into Flask global context
-        g.user_id = response.data[0]['user_id']
-        return f(*args, **kwargs)
-    return decorated
-
-# --- FRONTEND APP ROUTES ---
-
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-@app.route('/auth')
-def auth():
-    return render_template('auth.html', **get_template_context())
-
-@app.route('/auth/callback')
-def auth_callback():
-    return render_template('auth.html', **get_template_context())
-
-@app.route('/dashboard')
-def dashboard():
-    return render_template('dashboard.html', **get_template_context())
-
-# --- SYSTEM HEALTH ---
-
-@app.route('/ping')
-def ping():
-    try:
-        supabase.table('profiles').select('id').limit(1).execute()
-        return "OK - Render and Supabase are both awake!", 200
-    except Exception as e:
-        return f"Database error: {str(e)}", 500
-
-# --- THE UNIVERSAL API GATEWAY PROXY ---
-# Dynamically routes any request to /api/v1/<app_name>/<path:endpoint> 
-# to the corresponding registered microservice.
-
-@app.route('/api/v1/<app_name>/<path:endpoint>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
-@require_api_key
-def api_gateway(app_name, endpoint):
-    try:
-        # 1. Look up the microservice URL dynamically from the Supabase 'services' table (managed via Admin Dashboard)
-        service_res = supabase.table('services').select('target_url', 'is_active').eq('name', app_name.lower()).execute()
-        
-        if not service_res.data or not service_res.data[0]['is_active']:
-            return jsonify({"error": f"Service '{app_name}' is unregistered, invalid, or inactive."}), 404
-            
-        target_base_url = service_res.data[0]['target_url'].rstrip('/')
-        target_url = f"{target_base_url}/{endpoint}"
-        
-        # 2. Build secure forward headers (trusting MB as the middleman)
-        headers = {
-            "Content-Type": request.headers.get("Content-Type", "application/json"),
-            "X-Internal-Secret": INTERNAL_SECRET,
-            "X-User-ID": g.user_id
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>METEORBASE - Unified Command Center</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#cbc3d7",
+                        "primary": "#d0bcff",
+                        "surface": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "secondary": "#5de6ff",
+                        "surface-container-low": "#1c1b1b",
+                        "outline-variant": "#494454",
+                        "error": "#ffb4ab"
+                    },
+                    fontFamily: {
+                        "label-caps": ["Space Mono"],
+                        "code-md": ["Space Mono"],
+                        "body-md": ["Sora"]
+                    },
+                    fontSize: {
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                        "code-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+                    }
+                }
+            }
         }
-        
-        # Forward query parameters and request body
-        params = request.args
-        data = request.get_data()
-        
-        # 3. Proxy the request to the target app (e.g. Oblivion, VEX, SkipIDeate)
-        resp = requests.request(
-            method=request.method,
-            url=target_url,
-            headers=headers,
-            params=params,
-            data=data,
-            timeout=15
-        )
-        
-        # 4. Pipe response back to the client
-        return (resp.content, resp.status_code, resp.headers.items())
-        
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to communicate with service '{app_name}'.", "details": str(e)}), 502
-    except Exception as e:
-        return jsonify({"error": "Gateway routing exception.", "details": str(e)}), 500
+    </script>
+    <style>
+        body { background-color: theme('colors.surface'); color: theme('colors.on-surface'); }
+        .glass-panel {
+            background: rgba(19, 19, 19, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .neon-glow-primary { box-shadow: 0 0 15px rgba(208, 188, 255, 0.2); }
+        .brutalist-border { border: 2px solid theme('colors.outline-variant'); }
+        .cyan-text-glow { text-shadow: 0 0 10px rgba(93, 230, 255, 0.5); }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col font-body-md text-body-md">
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    <!-- Top Navigation Bar -->
+    <header class="w-full border-b border-outline-variant/30 bg-surface/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-primary text-2xl">hub</span>
+                <h1 class="font-headline-lg text-xl text-primary tracking-tighter cyan-text-glow">METEORBASE GATEWAY</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="userEmailBadge" class="font-code-md text-xs text-on-surface-variant bg-surface-container-low px-3 py-1.5 rounded border border-outline-variant/50">Loading...</span>
+                <span id="roleBadge" class="font-label-caps text-xs px-2.5 py-1 rounded border font-bold">USER</span>
+                <button onclick="logout()" class="border border-error/50 text-error font-label-caps text-xs px-4 py-2 rounded hover:bg-error/10 transition-colors">DISCONNECT</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto w-full px-6 py-12 flex-1 space-y-10">
+        
+        <!-- In-Site Alert Message Box -->
+        <div id="statusAlert" class="p-4 rounded border hidden font-code-md text-code-md"></div>
+
+        <!-- ================= USER VIEW (Visible to Everyone) ================= -->
+        <section class="glass-panel brutalist-border p-8 rounded-xl neon-glow-primary">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="font-headline-lg text-lg text-on-surface mb-1">Your Universal API Keys</h2>
+                    <p class="font-code-md text-xs text-on-surface-variant">Use these keys to authenticate API requests across your registered microservices via MeteorBase.</p>
+                </div>
+                <button onclick="generateApiKey()" class="bg-primary text-surface font-label-caps text-label-caps px-4 py-2.5 rounded hover:bg-primary/90 transition-colors font-bold flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[16px]">add</span> GENERATE KEY
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left font-code-md text-xs">
+                    <thead>
+                        <tr class="border-b border-outline-variant/30 text-on-surface-variant">
+                            <th class="pb-3">API KEY TOKEN</th>
+                            <th class="pb-3">CREATED AT</th>
+                            <th class="pb-3 text-right">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="apiKeyTableBody">
+                        <tr><td colspan="3" class="py-4 text-center text-on-surface-variant">Loading keys...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+
+        <!-- ================= ADMIN VIEW (STRICTLY ISOLATED FOR info.cometlabs@gmail.com) ================= -->
+        <div id="adminContainer" class="space-y-10 hidden">
+            
+            <!-- Real-Time Metrics & Telemetry -->
+            <section class="glass-panel brutalist-border p-8 rounded-xl border-secondary/30">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-secondary">monitoring</span>
+                        <div>
+                            <h2 class="font-headline-lg text-lg text-secondary mb-1">System Telemetry & Connected Microservices</h2>
+                            <p class="font-code-md text-xs text-on-surface-variant">Live gateway status for your application ecosystem.</p>
+                        </div>
+                    </div>
+                    <button onclick="loadAdminTelemetry()" class="text-xs text-secondary hover:underline font-code-md flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">refresh</span> Refresh Status
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-surface-container-low border border-outline-variant/40 p-5 rounded">
+                        <span class="text-xs font-label-caps text-on-surface-variant">REGISTERED APPS</span>
+                        <p id="statAppCount" class="text-2xl font-bold text-primary mt-2">0</p>
+                    </div>
+                    <div class="bg-surface-container-low border border-outline-variant/40 p-5 rounded">
+                        <span class="text-xs font-label-caps text-on-surface-variant">ACTIVE GATEWAY STATUS</span>
+                        <p class="text-2xl font-bold text-secondary mt-2">NOMINAL</p>
+                    </div>
+                    <div class="bg-surface-container-low border border-outline-variant/40 p-5 rounded">
+                        <span class="text-xs font-label-caps text-on-surface-variant">GATEWAY ROUTE</span>
+                        <p class="text-xs font-code-md text-on-surface mt-3 truncate">/api/v1/&lt;app_name&gt;/&lt;endpoint&gt;</p>
+                    </div>
+                </div>
+
+                <h3 class="font-label-caps text-xs text-on-surface-variant mb-4">CONNECTED MICROSERVICES REGISTRY</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="servicesGrid">
+                    <!-- Dynamically populated from database -->
+                </div>
+            </section>
+
+            <!-- Register New Microservice Form -->
+            <section class="glass-panel brutalist-border p-8 rounded-xl border-secondary/30">
+                <div class="flex items-center gap-3 mb-6">
+                    <span class="material-symbols-outlined text-secondary">add_link</span>
+                    <div>
+                        <h2 class="font-headline-lg text-lg text-secondary mb-1">Register New Microservice</h2>
+                        <p class="font-code-md text-xs text-on-surface-variant">Add a child app backend so MeteorBase can dynamically route traffic to it.</p>
+                    </div>
+                </div>
+
+                <form id="serviceForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-label-caps text-xs text-on-surface-variant mb-2">APP / SERVICE NAME</label>
+                        <input type="text" id="serviceName" placeholder="e.g. oblivion" class="w-full bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" required />
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block font-label-caps text-xs text-on-surface-variant mb-2">TARGET BASE URL (RENDER / LOCAL)</label>
+                        <div class="flex gap-2">
+                            <input type="url" id="serviceUrl" placeholder="https://oblivion-api.onrender.com" class="flex-1 bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" required />
+                            <button type="submit" class="bg-secondary text-surface font-label-caps text-xs px-6 rounded font-bold hover:bg-secondary/90 transition-colors">REGISTER</button>
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+        </div>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.0"></script>
+    <script>
+        const SUPABASE_URL = '{{ supabase_url }}';
+        const SUPABASE_ANON_KEY = '{{ supabase_key }}';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const statusAlert = document.getElementById('statusAlert');
+
+        function showAlert(msg, type = 'error') {
+            statusAlert.textContent = msg;
+            statusAlert.classList.remove('hidden', 'bg-error/20', 'border-error', 'text-error', 'bg-secondary/20', 'border-secondary', 'text-secondary');
+            if (type === 'error') {
+                statusAlert.classList.add('bg-error/20', 'border-error', 'text-error');
+            } else {
+                statusAlert.classList.add('bg-secondary/20', 'border-secondary', 'text-secondary');
+            }
+        }
+
+        async function initDashboard() {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/auth';
+                return;
+            }
+
+            const email = session.user.email;
+            document.getElementById('userEmailBadge').textContent = email;
+
+            // STRICT ADMIN ISOLATION CHECK
+            const isAdmin = (email === 'info.cometlabs@gmail.com');
+            
+            const roleBadge = document.getElementById('roleBadge');
+            if (isAdmin) {
+                roleBadge.textContent = 'ADMIN';
+                roleBadge.classList.add('bg-secondary/20', 'border-secondary', 'text-secondary');
+                document.getElementById('adminContainer').classList.remove('hidden');
+                loadAdminTelemetry();
+            } else {
+                roleBadge.textContent = 'USER';
+                roleBadge.classList.add('bg-primary/20', 'border-primary', 'text-primary');
+                document.getElementById('adminContainer').classList.add('hidden');
+            }
+
+            loadApiKeys(session.user.id);
+        }
+
+        async function loadApiKeys(userId) {
+            const { data, error } = await supabase.table('api_keys').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+            const tbody = document.getElementById('apiKeyTableBody');
+            tbody.innerHTML = '';
+
+            if (error || !data.length) {
+                tbody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-on-surface-variant">No API keys found. Generate one above.</td></tr>`;
+                return;
+            }
+
+            data.forEach(row => {
+                tbody.innerHTML += `
+                    <tr class="border-b border-outline-variant/10">
+                        <td class="py-3 font-code-md text-primary tracking-wider">mb_live_${row.api_key.substring(0, 16)}••••••••</td>
+                        <td class="py-3 text-on-surface-variant">${new Date(row.created_at).toLocaleDateString()}</td>
+                        <td class="py-3 text-right">
+                            <button onclick="deleteKey('${row.id}')" class="text-error hover:underline">Revoke</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function generateApiKey() {
+            const { data: { session } } = await supabase.auth.getSession();
+            const rawKey = crypto.randomUUID() + '-' + crypto.randomUUID();
+
+            const { error } = await supabase.table('api_keys').insert({
+                user_id: session.user.id,
+                api_key: rawKey
+            });
+
+            if (error) {
+                showAlert(`Failed to generate key: ${error.message}`, 'error');
+            } else {
+                showAlert(`API Key generated successfully! Save it securely: mb_live_${rawKey}`, 'success');
+                loadApiKeys(session.user.id);
+            }
+        }
+
+        async function deleteKey(keyId) {
+            const { data: { session } } = await supabase.auth.getSession();
+            const { error } = await supabase.table('api_keys').delete().eq('id', keyId);
+            if (!error) {
+                showAlert('API Key revoked successfully.', 'success');
+                loadApiKeys(session.user.id);
+            }
+        }
+
+        async function loadAdminTelemetry() {
+            const { data, error } = await supabase.table('services').select('*').order('created_at', { ascending: false });
+            const grid = document.getElementById('servicesGrid');
+            const countBadge = document.getElementById('statAppCount');
+            
+            grid.innerHTML = '';
+            if (error || !data) {
+                countBadge.textContent = '0';
+                grid.innerHTML = `<p class="text-xs text-on-surface-variant">Failed to load registered services.</p>`;
+                return;
+            }
+
+            countBadge.textContent = data.length;
+
+            if (!data.length) {
+                grid.innerHTML = `<p class="text-xs text-on-surface-variant">No microservices registered yet.</p>`;
+                return;
+            }
+
+            data.forEach(svc => {
+                grid.innerHTML += `
+                    <div class="bg-surface-container-low border border-outline-variant/40 p-4 rounded flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-xs uppercase font-bold text-secondary">${svc.name}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded bg-secondary/10 text-secondary">ACTIVE</span>
+                            </div>
+                            <p class="text-[11px] text-on-surface-variant truncate font-code-md">${svc.target_url}</p>
+                        </div>
+                        <button onclick="deleteService('${svc.id}')" class="mt-4 text-xs text-error text-left hover:underline">Unregister Service</button>
+                    </div>
+                `;
+            });
+        }
+
+        document.getElementById('serviceForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('serviceName').value.trim().toLowerCase();
+            const target_url = document.getElementById('serviceUrl').value.trim();
+
+            const { error } = await supabase.table('services').insert({ name, target_url });
+            if (error) {
+                showAlert(`Registration error: ${error.message}`, 'error');
+            } else {
+                showAlert(`Service '${name}' successfully registered!`, 'success');
+                document.getElementById('serviceForm').reset();
+                loadAdminTelemetry();
+            }
+        });
+
+        async function deleteService(id) {
+            const { error } = await supabase.table('services').delete().eq('id', id);
+            if (!error) {
+                showAlert('Microservice unregistered.', 'success');
+                loadAdminTelemetry();
+            }
+        }
+
+        async function logout() {
+            await supabase.auth.signOut();
+            localStorage.clear();
+            window.location.href = '/auth';
+        }
+
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>

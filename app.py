@@ -24,6 +24,15 @@ def get_template_context():
         'supabase_key': supabase_key
     }
 
+@app.route('/auth/callback')
+def auth_callback():
+    # Renders the auth page so the Supabase JS client can parse the 
+    # #access_token fragment in the URL and trigger the redirect to /dashboard
+    return render_template('auth.html', **get_template_context())
+
+
+
+
 # --- DECORATORS (The Security Layer) ---
 
 def require_api_key(f):

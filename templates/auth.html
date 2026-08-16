@@ -106,8 +106,13 @@
             <p class="font-code-md text-code-md text-on-surface-variant">Terminal Operations Authentication</p>
         </div>
 
-        <div class="glass-panel brutalist-border p-8 rounded-xl neon-glow-primary">
-            <div class="flex gap-4 mb-8 border-b border-outline-variant/30 pb-4">
+        <div class="glass-panel brutalist-border p-8 rounded-xl neon-glow-primary transition-all duration-300" id="mainPanel">
+            
+            <!-- In-site Notification Box -->
+            <div id="statusMsg" class="mb-6 p-3 border rounded font-code-md text-code-md hidden transition-all"></div>
+
+            <!-- Tab Headers -->
+            <div id="tabHeaders" class="flex gap-4 mb-8 border-b border-outline-variant/30 pb-4">
                 <button id="loginTab" class="flex-1 py-2 font-label-caps text-label-caps text-primary border-b-2 border-primary transition-colors">
                     SIGN IN
                 </button>
@@ -116,74 +121,104 @@
                 </button>
             </div>
 
+            <!-- Standard Login Form -->
             <form id="loginForm" class="space-y-6">
                 <div>
                     <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">EMAIL</label>
                     <input type="email" id="loginEmail" placeholder="you@example.com" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors" required/>
                 </div>
-
                 <div>
                     <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">PASSWORD</label>
                     <input type="password" id="loginPassword" placeholder="••••••••" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors" required/>
                 </div>
-
                 <button type="submit" class="w-full bg-primary text-on-surface font-label-caps text-label-caps py-3 rounded hover:bg-primary/90 transition-colors neon-glow-primary active:scale-95">
                     AUTHENTICATE
                 </button>
             </form>
 
+            <!-- Standard Signup Form -->
             <form id="signupForm" class="space-y-6 hidden">
                 <div>
                     <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">EMAIL</label>
                     <input type="email" id="signupEmail" placeholder="you@example.com" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors" required/>
                 </div>
-
                 <div>
                     <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">PASSWORD</label>
                     <input type="password" id="signupPassword" placeholder="••••••••" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors" required/>
                 </div>
-
                 <div>
                     <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">CONFIRM PASSWORD</label>
                     <input type="password" id="signupPasswordConfirm" placeholder="••••••••" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors" required/>
                 </div>
-
                 <button type="submit" class="w-full bg-secondary text-surface font-label-caps text-label-caps py-3 rounded hover:bg-secondary/90 transition-colors neon-glow-secondary active:scale-95">
                     CREATE ACCOUNT
                 </button>
             </form>
 
-            <div class="flex items-center my-6">
-                <div class="flex-1 border-t border-outline-variant/30"></div>
-                <span class="px-3 font-code-md text-code-md text-on-surface-variant text-[12px]">OR CONTINUE WITH</span>
-                <div class="flex-1 border-t border-outline-variant/30"></div>
+            <!-- OTP Morphing Flow (Hidden initially) -->
+            <div id="otpFlowContainer" class="hidden space-y-6">
+                <div class="text-center mb-6">
+                    <h2 class="font-label-caps text-label-caps text-primary tracking-widest">PASSWORDLESS ACCESS</h2>
+                </div>
+
+                <!-- OTP Step 1: Email Input -->
+                <div id="otpEmailStep">
+                    <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">TARGET EMAIL</label>
+                    <input type="email" id="targetOtpEmail" placeholder="you@example.com" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors" required/>
+                    <button type="button" id="executeOtpBtn" class="w-full bg-primary text-on-surface font-label-caps text-label-caps py-3 rounded hover:bg-primary/90 mt-6 transition-colors neon-glow-primary active:scale-95 flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined text-[18px]">send</span> TRANSMIT CODE
+                    </button>
+                    <button type="button" onclick="resetToStandardAuth()" class="w-full mt-4 py-2 font-code-md text-sm text-on-surface-variant hover:text-white transition-colors">
+                        Cancel Protocol
+                    </button>
+                </div>
+
+                <!-- OTP Step 2: Code Input -->
+                <div id="otpCodeStep" class="hidden">
+                    <label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">AUTHORIZATION CODE</label>
+                    <input type="text" id="targetOtpCode" placeholder="••••••" maxlength="6" class="w-full bg-surface-container-low border border-outline-variant/50 rounded px-4 py-3 text-on-surface font-code-md text-code-md focus:border-secondary focus:outline-none transition-colors tracking-[0.5em] text-center text-xl" required/>
+                    <button type="button" id="verifyOtpBtn" class="w-full bg-secondary text-surface font-label-caps text-label-caps py-3 rounded hover:bg-secondary/90 mt-6 transition-colors neon-glow-secondary active:scale-95 flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined text-[18px]">lock_open</span> VERIFY & LOGIN
+                    </button>
+                    <button type="button" onclick="morphToOtpEmail()" class="w-full mt-4 py-2 font-code-md text-sm text-on-surface-variant hover:text-white transition-colors">
+                        ← Change Target Email
+                    </button>
+                </div>
             </div>
 
-            <div class="space-y-3">
-                <button type="button" id="googleBtn" class="w-full border border-outline-variant/50 text-on-surface font-label-caps text-label-caps py-3 rounded hover:border-secondary hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
-                    GOOGLE
-                </button>
+            <!-- Social / OTP Trigger Container -->
+            <div id="socialContainer">
+                <div class="flex items-center my-6">
+                    <div class="flex-1 border-t border-outline-variant/30"></div>
+                    <span class="px-3 font-code-md text-code-md text-on-surface-variant text-[12px]">OR CONTINUE WITH</span>
+                    <div class="flex-1 border-t border-outline-variant/30"></div>
+                </div>
 
-                <button type="button" id="githubBtn" class="w-full border border-outline-variant/50 text-on-surface font-label-caps text-label-caps py-3 rounded hover:border-secondary hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                    GITHUB
-                </button>
+                <div class="space-y-3">
+                    <button type="button" id="googleBtn" class="w-full border border-outline-variant/50 text-on-surface font-label-caps text-label-caps py-3 rounded hover:border-secondary hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        GOOGLE
+                    </button>
 
-                <button type="button" id="otpBtn" class="w-full border border-outline-variant/50 text-on-surface font-label-caps text-label-caps py-3 rounded hover:border-secondary hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2">
-                    <span class="material-symbols-outlined text-[18px]">mail</span>
-                    EMAIL OTP
-                </button>
+                    <button type="button" id="githubBtn" class="w-full border border-outline-variant/50 text-on-surface font-label-caps text-label-caps py-3 rounded hover:border-secondary hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                        GITHUB
+                    </button>
+
+                    <!-- Morph Trigger -->
+                    <button type="button" id="initiateOtpBtn" class="w-full border border-outline-variant/50 text-on-surface font-label-caps text-label-caps py-3 rounded hover:border-secondary hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined text-[18px]">mail</span>
+                        EMAIL OTP
+                    </button>
+                </div>
             </div>
-
-            <div id="errorMsg" class="mt-4 p-3 bg-error/20 border border-error rounded text-error font-code-md text-code-md hidden"></div>
         </div>
 
         <div class="text-center mt-6">
@@ -200,72 +235,96 @@
         const SUPABASE_ANON_KEY = '{{ supabase_key }}';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        // UI Elements
         const loginTab = document.getElementById('loginTab');
         const signupTab = document.getElementById('signupTab');
         const loginForm = document.getElementById('loginForm');
         const signupForm = document.getElementById('signupForm');
-        const errorMsg = document.getElementById('errorMsg');
+        
+        const socialContainer = document.getElementById('socialContainer');
+        const tabHeaders = document.getElementById('tabHeaders');
+        const otpFlowContainer = document.getElementById('otpFlowContainer');
+        const otpEmailStep = document.getElementById('otpEmailStep');
+        const otpCodeStep = document.getElementById('otpCodeStep');
 
+        const statusMsg = document.getElementById('statusMsg');
+
+        // Status Message Handler (Success & Error)
+        function showStatus(msg, type = 'error') {
+            statusMsg.textContent = msg;
+            statusMsg.classList.remove('hidden', 'bg-error/20', 'border-error', 'text-error', 'bg-secondary/20', 'border-secondary', 'text-secondary');
+            
+            if (type === 'error') {
+                statusMsg.classList.add('bg-error/20', 'border-error', 'text-error');
+            } else if (type === 'success') {
+                statusMsg.classList.add('bg-secondary/20', 'border-secondary', 'text-secondary');
+            }
+        }
+
+        function hideStatus() {
+            statusMsg.classList.add('hidden');
+        }
+
+        // --- TAB SWITCHING ---
         loginTab.addEventListener('click', () => {
+            resetToStandardAuth();
             loginForm.classList.remove('hidden');
             signupForm.classList.add('hidden');
             loginTab.classList.add('text-primary', 'border-primary');
             loginTab.classList.remove('text-on-surface-variant', 'border-transparent');
             signupTab.classList.remove('text-primary', 'border-primary');
             signupTab.classList.add('text-on-surface-variant', 'border-transparent');
-            errorMsg.classList.add('hidden');
         });
 
         signupTab.addEventListener('click', () => {
+            resetToStandardAuth();
             signupForm.classList.remove('hidden');
             loginForm.classList.add('hidden');
             signupTab.classList.add('text-primary', 'border-primary');
             signupTab.classList.remove('text-on-surface-variant', 'border-transparent');
             loginTab.classList.remove('text-primary', 'border-primary');
             loginTab.classList.add('text-on-surface-variant', 'border-transparent');
-            errorMsg.classList.add('hidden');
         });
 
-        function showError(msg) {
-            errorMsg.textContent = msg;
-            errorMsg.classList.remove('hidden');
-        }
-
+        // --- STANDARD AUTH (Password) ---
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            hideStatus();
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
 
             try {
                 const { data, error } = await supabase.auth.signInWithPassword({ email, password });
                 if (error) throw error;
-                window.location.href = '/dashboard';
+                // onAuthStateChange handles redirect
             } catch (err) {
-                showError(`Login failed: ${err.message}`);
+                showStatus(`Login failed: ${err.message}`, 'error');
             }
         });
 
         signupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            hideStatus();
             const email = document.getElementById('signupEmail').value;
             const password = document.getElementById('signupPassword').value;
             const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
 
             if (password !== passwordConfirm) {
-                showError('Passwords do not match');
+                showStatus('Passwords do not match', 'error');
                 return;
             }
 
             try {
                 const { data, error } = await supabase.auth.signUp({ email, password });
                 if (error) throw error;
-                showError('Account created! Check your email to confirm.');
+                showStatus('Account created! Check your email to confirm.', 'success');
                 signupForm.reset();
             } catch (err) {
-                showError(`Signup failed: ${err.message}`);
+                showStatus(`Signup failed: ${err.message}`, 'error');
             }
         });
 
+        // --- OAUTH ---
         document.getElementById('googleBtn').addEventListener('click', async () => {
             try {
                 const { data, error } = await supabase.auth.signInWithOAuth({
@@ -274,7 +333,7 @@
                 });
                 if (error) throw error;
             } catch (err) {
-                showError(`Google auth failed: ${err.message}`);
+                showStatus(`Google auth failed: ${err.message}`, 'error');
             }
         });
 
@@ -286,26 +345,124 @@
                 });
                 if (error) throw error;
             } catch (err) {
-                showError(`GitHub auth failed: ${err.message}`);
+                showStatus(`GitHub auth failed: ${err.message}`, 'error');
             }
         });
 
-        document.getElementById('otpBtn').addEventListener('click', async () => {
-            const email = prompt('Enter your email for OTP:');
-            if (!email) return;
+        // --- OTP MORPHING LOGIC ---
+        document.getElementById('initiateOtpBtn').addEventListener('click', () => {
+            hideStatus();
+            // Hide everything else
+            loginForm.classList.add('hidden');
+            signupForm.classList.add('hidden');
+            socialContainer.classList.add('hidden');
+            tabHeaders.classList.add('hidden');
+            
+            // Show OTP flow
+            otpFlowContainer.classList.remove('hidden');
+            morphToOtpEmail();
+        });
+
+        function resetToStandardAuth() {
+            hideStatus();
+            otpFlowContainer.classList.add('hidden');
+            socialContainer.classList.remove('hidden');
+            tabHeaders.classList.remove('hidden');
+            
+            // Default to showing login form if resetting
+            if(loginTab.classList.contains('text-primary')) {
+                loginForm.classList.remove('hidden');
+            } else {
+                signupForm.classList.remove('hidden');
+            }
+        }
+
+        function morphToOtpEmail() {
+            hideStatus();
+            document.getElementById('targetOtpCode').value = '';
+            otpCodeStep.classList.add('hidden');
+            otpEmailStep.classList.remove('hidden');
+        }
+
+        // 1. Send OTP
+        document.getElementById('executeOtpBtn').addEventListener('click', async () => {
+            hideStatus();
+            const email = document.getElementById('targetOtpEmail').value.trim();
+            const btn = document.getElementById('executeOtpBtn');
+
+            if (!email) {
+                showStatus('Target email is required.', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span> TRANSMITTING...';
 
             try {
                 const { data, error } = await supabase.auth.signInWithOtp({ email });
                 if (error) throw error;
-                showError('Check your email for the OTP link!');
+                
+                showStatus('Transmission successful. Check your inbox.', 'success');
+                // Morph to Code Input
+                otpEmailStep.classList.add('hidden');
+                otpCodeStep.classList.remove('hidden');
             } catch (err) {
-                showError(`OTP failed: ${err.message}`);
+                showStatus(`OTP failed: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">send</span> TRANSMIT CODE';
             }
         });
 
+        // 2. Verify OTP
+        document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
+            hideStatus();
+            const email = document.getElementById('targetOtpEmail').value.trim();
+            const token = document.getElementById('targetOtpCode').value.trim();
+            const btn = document.getElementById('verifyOtpBtn');
+
+            if (!token) {
+                showStatus('Authorization code is required.', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span> VERIFYING...';
+
+            try {
+                const { data, error } = await supabase.auth.verifyOtp({
+                    email,
+                    token,
+                    type: 'email'
+                });
+                
+                if (error) throw error;
+                // Success triggers onAuthStateChange below automatically
+            } catch (err) {
+                showStatus(`Invalid Code: ${err.message}`, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">lock_open</span> VERIFY & LOGIN';
+            }
+        });
+
+        // --- GLOBAL SESSION LISTENER ---
         supabase.auth.onAuthStateChange((event, session) => {
             if (session && event === 'SIGNED_IN') {
-                window.location.href = '/dashboard';
+                const userEmail = session.user.email;
+                
+                showStatus("AUTHENTICATION CONFIRMED. REDIRECTING...", 'success');
+
+                // ADMIN ROLE CHECK
+                if (userEmail === 'info.cometlabs@gmail.com') {
+                    localStorage.setItem('role', 'ADMIN');
+                    console.log("Admin privileges granted.");
+                } else {
+                    localStorage.setItem('role', 'USER');
+                }
+
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 800);
             }
         });
     </script>

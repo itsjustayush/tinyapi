@@ -47,6 +47,8 @@
         .neon-glow-primary { box-shadow: 0 0 15px rgba(208, 188, 255, 0.2); }
         .brutalist-border { border: 2px solid theme('colors.outline-variant'); }
         .cyan-text-glow { text-shadow: 0 0 10px rgba(93, 230, 255, 0.5); }
+        .dot-live { width: 8px; height: 8px; border-radius: 9999px; background: #5de6ff; box-shadow: 0 0 8px #5de6ff; }
+        .dot-dead { width: 8px; height: 8px; border-radius: 9999px; background: #494454; }
     </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col font-body-md text-body-md">
@@ -67,7 +69,7 @@
     </header>
 
     <main class="max-w-7xl mx-auto w-full px-6 py-12 flex-1 space-y-10">
-        
+
         <!-- In-Site Alert Message Box -->
         <div id="statusAlert" class="p-4 rounded border hidden font-code-md text-code-md"></div>
 
@@ -76,33 +78,44 @@
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h2 class="font-headline-lg text-lg text-on-surface mb-1">Your Universal API Keys</h2>
-                    <p class="font-code-md text-xs text-on-surface-variant">Use these keys to authenticate API requests across your registered microservices via MeteorBase.</p>
+                    <p class="font-code-md text-xs text-on-surface-variant">Send these as the <code>X-API-Key</code> header to call any registered app through MeteorBase.</p>
                 </div>
                 <button onclick="generateApiKey()" class="bg-primary text-surface font-label-caps text-label-caps px-4 py-2.5 rounded hover:bg-primary/90 transition-colors font-bold flex items-center gap-2">
                     <span class="material-symbols-outlined text-[16px]">add</span> GENERATE KEY
                 </button>
             </div>
 
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block font-label-caps text-xs text-on-surface-variant mb-2">KEY NAME (OPTIONAL)</label>
+                    <input type="text" id="newKeyName" placeholder="e.g. production-server" class="w-full bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" />
+                </div>
+                <div class="md:pt-8">
+                    <p class="font-code-md text-[11px] text-on-surface-variant">Keys are unrestricted by default. Service-scoped keys can be locked down later via <code>api_key_service_access</code>.</p>
+                </div>
+            </div>
+
             <div class="overflow-x-auto">
                 <table class="w-full text-left font-code-md text-xs">
                     <thead>
                         <tr class="border-b border-outline-variant/30 text-on-surface-variant">
+                            <th class="pb-3">NAME</th>
                             <th class="pb-3">API KEY TOKEN</th>
                             <th class="pb-3">CREATED AT</th>
+                            <th class="pb-3">LAST USED</th>
                             <th class="pb-3 text-right">ACTION</th>
                         </tr>
                     </thead>
                     <tbody id="apiKeyTableBody">
-                        <tr><td colspan="3" class="py-4 text-center text-on-surface-variant">Loading keys...</td></tr>
+                        <tr><td colspan="5" class="py-4 text-center text-on-surface-variant">Loading keys...</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-
-        <!-- ================= ADMIN VIEW (STRICTLY ISOLATED FOR info.cometlabs@gmail.com) ================= -->
+        <!-- ================= ADMIN VIEW (STRICTLY ISOLATED - checked server-side via /api/v1/me) ================= -->
         <div id="adminContainer" class="space-y-10 hidden">
-            
+
             <!-- Real-Time Metrics & Telemetry -->
             <section class="glass-panel brutalist-border p-8 rounded-xl border-secondary/30">
                 <div class="flex items-center justify-between mb-6">
@@ -110,7 +123,7 @@
                         <span class="material-symbols-outlined text-secondary">monitoring</span>
                         <div>
                             <h2 class="font-headline-lg text-lg text-secondary mb-1">System Telemetry & Connected Microservices</h2>
-                            <p class="font-code-md text-xs text-on-surface-variant">Live gateway status for your application ecosystem.</p>
+                            <p class="font-code-md text-xs text-on-surface-variant">Live gateway status for your application ecosystem (real DB data).</p>
                         </div>
                     </div>
                     <button onclick="loadAdminTelemetry()" class="text-xs text-secondary hover:underline font-code-md flex items-center gap-1">
@@ -134,8 +147,8 @@
                 </div>
 
                 <h3 class="font-label-caps text-xs text-on-surface-variant mb-4">CONNECTED MICROSERVICES REGISTRY</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="servicesGrid">
-                    <!-- Dynamically populated from database -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="servicesGrid">
+                    <!-- Dynamically populated from /api/v1/admin/services -->
                 </div>
             </section>
 
@@ -145,23 +158,103 @@
                     <span class="material-symbols-outlined text-secondary">add_link</span>
                     <div>
                         <h2 class="font-headline-lg text-lg text-secondary mb-1">Register New Microservice</h2>
-                        <p class="font-code-md text-xs text-on-surface-variant">Add a child app backend so MeteorBase can dynamically route traffic to it.</p>
+                        <p class="font-code-md text-xs text-on-surface-variant">Add a child app backend so MeteorBase can dynamically route traffic to it. This is stored in the <code>services</code> table - no hardcoded URLs.</p>
                     </div>
                 </div>
 
-                <form id="serviceForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <form id="serviceForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="block font-label-caps text-xs text-on-surface-variant mb-2">APP / SERVICE NAME</label>
                         <input type="text" id="serviceName" placeholder="e.g. oblivion" class="w-full bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" required />
                     </div>
+                    <div>
+                        <label class="block font-label-caps text-xs text-on-surface-variant mb-2">DISPLAY NAME</label>
+                        <input type="text" id="serviceDisplayName" placeholder="e.g. Oblivion" class="w-full bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" />
+                    </div>
                     <div class="md:col-span-2">
-                        <label class="block font-label-caps text-xs text-on-surface-variant mb-2">TARGET BASE URL (RENDER / LOCAL)</label>
+                        <label class="block font-label-caps text-xs text-on-surface-variant mb-2">TARGET WEBHOOK BASE URL</label>
                         <div class="flex gap-2">
                             <input type="url" id="serviceUrl" placeholder="https://oblivion-api.onrender.com" class="flex-1 bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" required />
                             <button type="submit" class="bg-secondary text-surface font-label-caps text-xs px-6 rounded font-bold hover:bg-secondary/90 transition-colors">REGISTER</button>
                         </div>
                     </div>
+                    <div class="md:col-span-4">
+                        <label class="block font-label-caps text-xs text-on-surface-variant mb-2">DESCRIPTION</label>
+                        <input type="text" id="serviceDescription" placeholder="What does this app do?" class="w-full bg-surface-container-low border border-outline-variant/50 rounded p-3 text-on-surface font-code-md text-xs focus:border-secondary focus:outline-none" />
+                    </div>
                 </form>
+
+                <!-- Newly issued webhook secret (shown once, right after registration) -->
+                <div id="secretPanel" class="mt-6 hidden border border-secondary/30 rounded p-4 bg-secondary/5">
+                    <p class="font-label-caps text-xs text-secondary mb-2">WEBHOOK SECRET ISSUED - SHARE THIS WITH THE APP</p>
+                    <div class="flex items-center gap-2">
+                        <code id="secretValue" class="flex-1 bg-surface-container-low border border-outline-variant/50 rounded p-2 text-xs font-code-md break-all"></code>
+                        <button onclick="copySecret()" class="text-xs text-secondary hover:underline font-code-md">COPY</button>
+                    </div>
+                    <p class="font-code-md text-[11px] text-on-surface-variant mt-2">The app sends this as <code>X-Service-Secret</code> when pinging MeteorBase for uptime. MeteorBase forwards it to the app on every proxied request so the app can verify the caller.</p>
+                </div>
+            </section>
+
+            <!-- Gateway Traffic Logs -->
+            <section class="glass-panel brutalist-border p-8 rounded-xl border-secondary/30">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-secondary">receipt_long</span>
+                        <div>
+                            <h2 class="font-headline-lg text-lg text-secondary mb-1">Gateway Request Logs</h2>
+                            <p class="font-code-md text-xs text-on-surface-variant">Every request routed through MeteorBase, written to <code>request_logs</code>.</p>
+                        </div>
+                    </div>
+                    <button onclick="loadLogs()" class="text-xs text-secondary hover:underline font-code-md">Refresh Logs</button>
+                </div>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-left font-code-md text-xs">
+                        <thead class="sticky top-0 bg-surface">
+                            <tr class="border-b border-outline-variant/30 text-on-surface-variant">
+                                <th class="pb-3 pr-3">TIME</th>
+                                <th class="pb-3 pr-3">SERVICE</th>
+                                <th class="pb-3 pr-3">METHOD</th>
+                                <th class="pb-3 pr-3">PATH</th>
+                                <th class="pb-3 pr-3">STATUS</th>
+                                <th class="pb-3 pr-3">LATENCY</th>
+                                <th class="pb-3">USER</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody">
+                            <tr><td colspan="7" class="py-4 text-center text-on-surface-variant">Loading logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Uptime Heartbeats -->
+            <section class="glass-panel brutalist-border p-8 rounded-xl border-secondary/30">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-secondary">pulse</span>
+                        <div>
+                            <h2 class="font-headline-lg text-lg text-secondary mb-1">Uptime Heartbeats</h2>
+                            <p class="font-code-md text-xs text-on-surface-variant">Pings each child app sends back to <code>/api/v1/apps/&lt;name&gt;/heartbeat</code>.</p>
+                        </div>
+                    </div>
+                    <button onclick="loadHeartbeats()" class="text-xs text-secondary hover:underline font-code-md">Refresh</button>
+                </div>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-left font-code-md text-xs">
+                        <thead class="sticky top-0 bg-surface">
+                            <tr class="border-b border-outline-variant/30 text-on-surface-variant">
+                                <th class="pb-3 pr-3">TIME</th>
+                                <th class="pb-3 pr-3">SERVICE</th>
+                                <th class="pb-3 pr-3">STATUS</th>
+                                <th class="pb-3 pr-3">LATENCY</th>
+                                <th class="pb-3">DETAILS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="heartbeatsTableBody">
+                            <tr><td colspan="5" class="py-4 text-center text-on-surface-variant">Loading heartbeats...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
         </div>
@@ -175,6 +268,7 @@
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const statusAlert = document.getElementById('statusAlert');
+        let lastSecret = null;
 
         function showAlert(msg, type = 'error') {
             statusAlert.textContent = msg;
@@ -186,50 +280,93 @@
             }
         }
 
+        async function getToken() {
+            const { data: { session } } = await supabase.auth.getSession();
+            return session ? session.access_token : null;
+        }
+
+        // Authenticated server-side API helper (uses the browser JWT)
+        async function api(path, options = {}) {
+            const token = await getToken();
+            if (!token) { window.location.href = '/auth'; throw new Error('not-authed'); }
+            const headers = { 'Authorization': `Bearer ${token}`, ...(options.headers || {}) };
+            if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
+                headers['Content-Type'] = 'application/json';
+            }
+            const res = await fetch(path, { ...options, headers });
+            const data = await res.json().catch(() => ({}));
+            return { status: res.status, data };
+        }
+
+        function fmtTime(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return d.toLocaleString();
+        }
+
+        function lastSeenLabel(iso) {
+            if (!iso) return 'NEVER';
+            const diff = Date.now() - new Date(iso).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'JUST NOW';
+            if (mins < 60) return `${mins}M AGO`;
+            return `${Math.floor(mins / 60)}H AGO`;
+        }
+
+        // ----------------------------------------------------------------
+        // INIT
+        // ----------------------------------------------------------------
         async function initDashboard() {
             const { data: { session }, error } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/auth';
-                return;
-            }
+            if (!session) { window.location.href = '/auth'; return; }
 
             const email = session.user.email;
             document.getElementById('userEmailBadge').textContent = email;
 
-            // STRICT ADMIN ISOLATION CHECK
-            const isAdmin = (email === 'info.cometlabs@gmail.com');
-            
-            const roleBadge = document.getElementById('roleBadge');
-            if (isAdmin) {
-                roleBadge.textContent = 'ADMIN';
-                roleBadge.classList.add('bg-secondary/20', 'border-secondary', 'text-secondary');
-                document.getElementById('adminContainer').classList.remove('hidden');
-                loadAdminTelemetry();
-            } else {
-                roleBadge.textContent = 'USER';
-                roleBadge.classList.add('bg-primary/20', 'border-primary', 'text-primary');
-                document.getElementById('adminContainer').classList.add('hidden'); // Ensure hidden for normal users
+            // Role comes from the DB (profiles.role) - no hardcoded emails.
+            try {
+                const { data } = await api('/api/v1/me');
+                const role = (data.user && data.user.role) || 'user';
+                const roleBadge = document.getElementById('roleBadge');
+                if (role === 'admin') {
+                    roleBadge.textContent = 'ADMIN';
+                    roleBadge.classList.add('bg-secondary/20', 'border-secondary', 'text-secondary');
+                    document.getElementById('adminContainer').classList.remove('hidden');
+                    loadAdminTelemetry();
+                    loadLogs();
+                    loadHeartbeats();
+                } else {
+                    roleBadge.textContent = 'USER';
+                    roleBadge.classList.add('bg-primary/20', 'border-primary', 'text-primary');
+                    document.getElementById('adminContainer').classList.add('hidden');
+                }
+            } catch (e) {
+                // fallback: role stays USER
             }
 
             loadApiKeys(session.user.id);
         }
 
-        // --- USER API KEY HANDLERS ---
+        // ----------------------------------------------------------------
+        // USER API KEYS (client-side via Supabase, scoped to the user's row)
+        // ----------------------------------------------------------------
         async function loadApiKeys(userId) {
             const { data, error } = await supabase.table('api_keys').select('*').eq('user_id', userId).order('created_at', { ascending: false });
             const tbody = document.getElementById('apiKeyTableBody');
             tbody.innerHTML = '';
 
             if (error || !data.length) {
-                tbody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-on-surface-variant">No API keys found. Generate one above.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-on-surface-variant">No API keys found. Generate one above.</td></tr>`;
                 return;
             }
 
             data.forEach(row => {
                 tbody.innerHTML += `
                     <tr class="border-b border-outline-variant/10">
+                        <td class="py-3">${(row.name || 'default')}</td>
                         <td class="py-3 font-code-md text-primary tracking-wider">mb_live_${row.api_key.substring(0, 16)}••••••••</td>
                         <td class="py-3 text-on-surface-variant">${new Date(row.created_at).toLocaleDateString()}</td>
+                        <td class="py-3 text-on-surface-variant">${fmtTime(row.last_used_at)}</td>
                         <td class="py-3 text-right">
                             <button onclick="deleteKey('${row.id}')" class="text-error hover:underline">Revoke</button>
                         </td>
@@ -241,16 +378,19 @@
         async function generateApiKey() {
             const { data: { session } } = await supabase.auth.getSession();
             const rawKey = crypto.randomUUID() + '-' + crypto.randomUUID();
+            const name = (document.getElementById('newKeyName').value || 'default').trim();
 
             const { error } = await supabase.table('api_keys').insert({
                 user_id: session.user.id,
-                api_key: rawKey
+                api_key: rawKey,
+                name
             });
 
             if (error) {
                 showAlert(`Failed to generate key: ${error.message}`, 'error');
             } else {
-                showAlert(`API Key generated successfully! Save it securely: mb_live_${rawKey}`, 'success');
+                showAlert(`API Key generated! Save it securely: mb_live_${rawKey}`, 'success');
+                document.getElementById('newKeyName').value = '';
                 loadApiKeys(session.user.id);
             }
         }
@@ -264,37 +404,68 @@
             }
         }
 
-        // --- ADMIN TELEMETRY & MICROSERVICES HANDLERS ---
+        // ----------------------------------------------------------------
+        // ADMIN TELEMETRY & MICROSERVICES (server-side, real DB data)
+        // ----------------------------------------------------------------
         async function loadAdminTelemetry() {
-            const { data, error } = await supabase.table('services').select('*').order('created_at', { ascending: false });
+            const { status, data } = await api('/api/v1/admin/services');
             const grid = document.getElementById('servicesGrid');
             const countBadge = document.getElementById('statAppCount');
-            
+
             grid.innerHTML = '';
-            if (error || !data) {
+            if (status !== 200 || !data.services) {
                 countBadge.textContent = '0';
                 grid.innerHTML = `<p class="text-xs text-on-surface-variant">Failed to load registered services.</p>`;
                 return;
             }
 
-            countBadge.textContent = data.length;
-
-            if (!data.length) {
+            countBadge.textContent = data.services.length;
+            if (!data.services.length) {
                 grid.innerHTML = `<p class="text-xs text-on-surface-variant">No microservices registered yet.</p>`;
                 return;
             }
 
-            data.forEach(svc => {
+            data.services.forEach(svc => {
+                const endpoints = svc.service_endpoints || [];
+                const endRows = endpoints.length
+                    ? endpoints.map(e => `
+                        <div class="flex items-center justify-between gap-2 py-1">
+                            <span class="text-[11px] font-code-md">
+                                <span class="text-secondary">${e.method}</span>
+                                <span class="text-on-surface">${e.path}</span>
+                            </span>
+                            <button onclick="deleteEndpoint('${svc.id}', '${e.id}')" class="text-[10px] text-error hover:underline">REMOVE</button>
+                        </div>`).join('')
+                    : `<p class="text-[11px] text-on-surface-variant py-1">No endpoints registered - OPEN MODE (any route passes).</p>`;
+
                 grid.innerHTML += `
-                    <div class="bg-surface-container-low border border-outline-variant/40 p-4 rounded flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-start mb-2">
+                    <div class="bg-surface-container-low border border-outline-variant/40 p-4 rounded flex flex-col">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
                                 <span class="text-xs uppercase font-bold text-secondary">${svc.name}</span>
-                                <span class="text-[10px] px-2 py-0.5 rounded bg-secondary/10 text-secondary">ACTIVE</span>
+                                ${svc.display_name ? `<span class="text-[10px] text-on-surface-variant ml-2">${svc.display_name}</span>` : ''}
                             </div>
-                            <p class="text-[11px] text-on-surface-variant truncate font-code-md">${svc.target_url}</p>
+                            <button onclick="toggleService('${svc.id}', ${svc.is_active})"
+                                class="text-[10px] px-2 py-0.5 rounded font-code-md ${svc.is_active ? 'bg-secondary/10 text-secondary' : 'bg-error/10 text-error'}">
+                                ${svc.is_active ? 'ACTIVE' : 'DISABLED'}
+                            </button>
                         </div>
-                        <button onclick="deleteService('${svc.id}')" class="mt-4 text-xs text-error text-left hover:underline">Unregister Service</button>
+                        <p class="text-[11px] text-on-surface-variant truncate font-code-md mb-1">${svc.webhook_url}</p>
+                        <p class="text-[10px] text-on-surface-variant font-code-md mb-3 flex items-center gap-2">
+                            <span class="${svc.last_seen_at ? 'dot-live' : 'dot-dead'}"></span> LAST SEEN: ${lastSeenLabel(svc.last_seen_at)}
+                        </p>
+
+                        <div class="border-t border-outline-variant/20 pt-2 mb-3">${endRows}</div>
+
+                        <form onsubmit="addEndpoint(event, '${svc.id}')" class="flex gap-1 mb-3">
+                            <select class="bg-surface border border-outline-variant/50 rounded px-1 py-1 text-[10px] font-code-md text-on-surface focus:outline-none">
+                                <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+                            </select>
+                            <input type="text" placeholder="/sessions" class="flex-1 bg-surface border border-outline-variant/50 rounded px-2 py-1 text-[10px] font-code-md text-on-surface focus:outline-none" required />
+                            <button class="text-[10px] text-secondary hover:underline font-code-md">ADD</button>
+                        </form>
+
+                        <button onclick="deleteService('${svc.id}')" class="mt-auto text-xs text-error text-left hover:underline">Unregister Service</button>
                     </div>
                 `;
             });
@@ -302,25 +473,137 @@
 
         document.getElementById('serviceForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const name = document.getElementById('serviceName').value.trim().toLowerCase();
-            const target_url = document.getElementById('serviceUrl').value.trim();
-
-            const { error } = await supabase.table('services').insert({ name, target_url });
-            if (error) {
-                showAlert(`Registration error: ${error.message}`, 'error');
-            } else {
-                showAlert(`Service '${name}' successfully registered!`, 'success');
+            const payload = {
+                name: document.getElementById('serviceName').value.trim().toLowerCase(),
+                display_name: document.getElementById('serviceDisplayName').value.trim(),
+                webhook_url: document.getElementById('serviceUrl').value.trim(),
+                description: document.getElementById('serviceDescription').value.trim()
+            };
+            const { status, data } = await api('/api/v1/admin/services', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            if (status === 201) {
+                lastSecret = data.service.webhook_secret;
+                document.getElementById('secretValue').textContent = `webhook_secret: ${lastSecret}`;
+                document.getElementById('secretPanel').classList.remove('hidden');
+                showAlert(`Service '${payload.name}' registered!`, 'success');
                 document.getElementById('serviceForm').reset();
                 loadAdminTelemetry();
+            } else {
+                showAlert(`Registration error: ${data.error || 'unknown'}`, 'error');
             }
         });
 
+        function copySecret() {
+            if (lastSecret) {
+                navigator.clipboard.writeText(lastSecret);
+                showAlert('Webhook secret copied.', 'success');
+            }
+        }
+
+        async function toggleService(id, current) {
+            const { status, data } = await api(`/api/v1/admin/services/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ is_active: !current })
+            });
+            if (status === 200) {
+                showAlert('Service state updated.', 'success');
+                loadAdminTelemetry();
+            } else {
+                showAlert(`Update failed: ${data.error || 'unknown'}`, 'error');
+            }
+        }
+
         async function deleteService(id) {
-            const { error } = await supabase.table('services').delete().eq('id', id);
-            if (!error) {
+            if (!confirm('Unregister this service? Its endpoints will be removed too.')) return;
+            const { status } = await api(`/api/v1/admin/services/${id}`, { method: 'DELETE' });
+            if (status === 200) {
                 showAlert('Microservice unregistered.', 'success');
                 loadAdminTelemetry();
+            } else {
+                showAlert('Failed to unregister service.', 'error');
             }
+        }
+
+        async function addEndpoint(event, serviceId) {
+            event.preventDefault();
+            const form = event.target;
+            const method = form.querySelector('select').value;
+            const path = form.querySelector('input').value.trim();
+            const { status, data } = await api(`/api/v1/admin/services/${serviceId}/endpoints`, {
+                method: 'POST',
+                body: JSON.stringify({ method, path })
+            });
+            if (status === 201) {
+                showAlert(`Endpoint ${method} ${path} registered.`, 'success');
+                loadAdminTelemetry();
+            } else {
+                showAlert(`Failed to add endpoint: ${data.error || 'unknown'}`, 'error');
+            }
+        }
+
+        async function deleteEndpoint(serviceId, endpointId) {
+            const { status } = await api(`/api/v1/admin/services/${serviceId}/endpoints/${endpointId}`, { method: 'DELETE' });
+            if (status === 200) {
+                showAlert('Endpoint removed.', 'success');
+                loadAdminTelemetry();
+            } else {
+                showAlert('Failed to remove endpoint.', 'error');
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // TELEMETRY: LOGS + HEARTBEATS
+        // ----------------------------------------------------------------
+        async function loadLogs() {
+            const { status, data } = await api('/api/v1/admin/logs?limit=50');
+            const tbody = document.getElementById('logsTableBody');
+            if (status !== 200 || !data.logs) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-4 text-center text-on-surface-variant">Failed to load logs.</td></tr>`;
+                return;
+            }
+            if (!data.logs.length) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-4 text-center text-on-surface-variant">No traffic yet. Call the gateway with an API key to see logs here.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = data.logs.map(log => `
+                <tr class="border-b border-outline-variant/10">
+                    <td class="py-2 pr-3 text-on-surface-variant">${fmtTime(log.created_at)}</td>
+                    <td class="py-2 pr-3 text-secondary">${log.service_name || '—'}</td>
+                    <td class="py-2 pr-3">${log.method}</td>
+                    <td class="py-2 pr-3 truncate max-w-[180px]">${log.path}</td>
+                    <td class="py-2 pr-3 ${log.status_code >= 400 ? 'text-error' : 'text-secondary'}">${log.status_code}</td>
+                    <td class="py-2 pr-3 text-on-surface-variant">${log.latency_ms}ms</td>
+                    <td class="py-2 text-on-surface-variant">${log.user_id ? log.user_id.substring(0, 8) : '—'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadHeartbeats() {
+            const { status, data } = await api('/api/v1/admin/heartbeats?limit=30');
+            const tbody = document.getElementById('heartbeatsTableBody');
+            if (status !== 200 || !data.heartbeats) {
+                tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-on-surface-variant">Failed to load heartbeats.</td></tr>`;
+                return;
+            }
+            if (!data.heartbeats.length) {
+                tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-on-surface-variant">No heartbeats yet. Your apps should ping <code>/api/v1/apps/&lt;name&gt;/heartbeat</code>.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = data.heartbeats.map(h => {
+                const svcName = h.services ? h.services.name : '—';
+                const details = h.details ? JSON.stringify(h.details) : '';
+                return `
+                    <tr class="border-b border-outline-variant/10">
+                        <td class="py-2 pr-3 text-on-surface-variant">${fmtTime(h.created_at)}</td>
+                        <td class="py-2 pr-3 text-secondary">${svcName}</td>
+                        <td class="py-2 pr-3 ${h.status === 'ok' ? 'text-secondary' : 'text-error'}">${h.status}</td>
+                        <td class="py-2 pr-3 text-on-surface-variant">${h.latency_ms}ms</td>
+                        <td class="py-2 text-on-surface-variant">${details}</td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         async function logout() {

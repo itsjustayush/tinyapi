@@ -3,7 +3,7 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>CORE BRAIN Landing Page</title>
+<title>METEORBASE Landing Page</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&amp;family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&amp;display=swap" rel="stylesheet"/>
@@ -252,7 +252,7 @@ void main() {
 <nav class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/20 hidden md:flex">
 <div class="flex justify-between items-center px-margin py-4 max-w-container-max mx-auto w-full">
 <div class="flex items-center gap-8">
-<span class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary">CORE BRAIN</span>
+<span class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary">METEORBASE</span>
 <div class="flex items-center gap-6">
 <a class="text-primary font-bold border-b-2 border-primary pb-1" href="#">Architecture</a>
 <a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200" href="#">API Gateway</a>
@@ -267,17 +267,17 @@ void main() {
 </div>
 </nav>
 <nav class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-outline-variant/20 md:hidden flex justify-between items-center px-4 py-4">
-<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tighter text-primary">CORE BRAIN</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tighter text-primary">METEORBASE</span>
 <button class="text-primary"><span class="material-symbols-outlined">menu</span></button>
 </nav>
 <main class="pt-32 md:pt-48 pb-24 px-margin max-w-container-max mx-auto flex flex-col gap-32">
 <section class="relative min-h-[70vh] flex flex-col md:flex-row items-center justify-between gap-12 parallax-container">
 <div class="flex-1 flex flex-col gap-8 z-10 parallax-item" data-speed="0.2">
-<h1 class="font-label-caps text-label-caps text-secondary tracking-[0.2em] uppercase cyan-text-glow">Terminal Operations</h1>
-<h2 class="font-headline-xl text-headline-xl text-on-surface max-w-2xl leading-tight">The Central Intelligence for Your Entire App Ecosystem.</h2>
-<p class="font-body-md text-body-md text-on-surface-variant max-w-xl">Deploy, scale, and secure your backend infrastructure with terminal-level precision. A unified BaaS environment designed for protocol architects.</p>
+<h1 class="font-label-caps text-label-caps text-secondary tracking-[0.2em] uppercase cyan-text-glow">Unified API Gateway</h1>
+<h2 class="font-headline-xl text-headline-xl text-on-surface max-w-2xl leading-tight">One API. Every App You've Ever Built.</h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-xl">MeteorBase is the central middleman for your entire app ecosystem. Register a webhook for VEX, SkipIdeate, Oblivion - and every future project - then drive them all through a single authenticated gateway with role-based access.</p>
 <div class="flex gap-4 mt-4">
-<a href="/auth" class="bg-primary text-on-primary font-label-caps text-label-caps px-8 py-4 hover:bg-primary-fixed-dim transition-colors active:scale-95 neon-glow-violet brutalist-border uppercase font-bold flex items-center gap-2">Initialize Core <span class="material-symbols-outlined text-[18px]">terminal</span></a>
+<a href="/auth" class="bg-primary text-on-primary font-label-caps text-label-caps px-8 py-4 hover:bg-primary-fixed-dim transition-colors active:scale-95 neon-glow-violet brutalist-border uppercase font-bold flex items-center gap-2">Initialize Gateway <span class="material-symbols-outlined text-[18px]">terminal</span></a>
 <button class="font-code-md text-code-md text-on-surface border border-outline-variant px-8 py-4 hover:border-secondary hover:text-secondary transition-colors brutalist-border bg-surface-container-low/50 backdrop-blur-sm">View Documentation</button>
 </div>
 </div>
@@ -384,12 +384,12 @@ animate();
 </div>
 <div class="w-full md:w-[400px] h-[200px] bg-surface border border-outline-variant rounded p-4 flex flex-col gap-2 font-code-md text-code-md text-xs overflow-hidden relative">
 <div class="text-outline-variant mb-2">// Initialize Client</div>
-<div class="text-secondary">const core = new CoreBrain({</div>
-<div class="text-primary pl-4">apiKey: process.env.CORE_KEY,</div>
+<div class="text-secondary">const mb = new MeteorBase({</div>
+<div class="text-primary pl-4">apiKey: process.env.MB_API_KEY,</div>
 <div class="text-primary pl-4">environment: 'production'</div>
 <div class="text-secondary">});</div>
-<div class="text-outline-variant mt-2">// Fetch Analytics</div>
-<div class="text-on-surface">await core.gateway.getMetrics();</div>
+<div class="text-outline-variant mt-2">// Fetch Oblivion data via gateway</div>
+<div class="text-on-surface">await mb.get('oblivion', '/sessions');</div>
 <div class="w-2 h-4 bg-secondary mt-1 animate-pulse"></div>
 </div>
 </div>
@@ -397,7 +397,7 @@ animate();
 </main>
 <footer class="w-full py-12 bg-surface border-t border-outline-variant/10 relative z-10 mt-12">
 <div class="flex flex-col md:flex-row justify-between items-center px-margin max-w-container-max mx-auto gap-6">
-<span class="font-label-caps text-label-caps text-on-surface">© 2024 CORE BRAIN TERMINAL. ALL RIGHTS RESERVED.</span>
+<span class="font-label-caps text-label-caps text-on-surface">© 2024 METEORBASE GATEWAY. ALL RIGHTS RESERVED.</span>
 <div class="flex gap-6 font-code-md text-code-md">
 <a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-all" href="#">Privacy Policy</a>
 <a class="text-on-surface-variant hover:text-secondary opacity-80 hover:opacity-100 transition-all" href="#">Terms of Service</a>

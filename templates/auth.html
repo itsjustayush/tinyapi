@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>CORE BRAIN - Authentication</title>
+    <title>METEORBASE - Authentication</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet"/>
@@ -102,8 +102,8 @@
 
     <div class="w-full max-w-md px-6 relative z-10">
         <div class="text-center mb-12">
-            <h1 class="font-headline-lg text-3xl text-primary tracking-tighter mb-2 cyan-text-glow">CORE BRAIN</h1>
-            <p class="font-code-md text-code-md text-on-surface-variant">Terminal Operations Authentication</p>
+            <h1 class="font-headline-lg text-3xl text-primary tracking-tighter mb-2 cyan-text-glow">METEORBASE</h1>
+            <p class="font-code-md text-code-md text-on-surface-variant">Unified API Gateway Authentication</p>
         </div>
 
         <div class="glass-panel brutalist-border p-8 rounded-xl neon-glow-primary transition-all duration-300" id="mainPanel">
@@ -424,15 +424,8 @@
 
         supabase.auth.onAuthStateChange((event, session) => {
             if (session && event === 'SIGNED_IN') {
-                const userEmail = session.user.email;
+                // Role is resolved server-side on /dashboard via profiles.role.
                 showStatus("AUTHENTICATION CONFIRMED. REDIRECTING...", 'success');
-
-                if (userEmail === 'info.cometlabs@gmail.com') {
-                    localStorage.setItem('role', 'ADMIN');
-                } else {
-                    localStorage.setItem('role', 'USER');
-                }
-
                 setTimeout(() => {
                     window.location.href = '/dashboard';
                 }, 800);

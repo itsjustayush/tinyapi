@@ -1,15 +1,18 @@
 """The core MeteorBase proxy: dynamic routing to registered child apps."""
 import os
 import time
+from hmac import compare_digest
 from datetime import datetime, timezone
+from ipaddress import ip_address
+from urllib.parse import urlparse
 
 import requests
-from flask import Blueprint, Response, g, jsonify, request
+from flask import Blueprint, Response, current_app, g, jsonify, request
 
 from .db import get_supabase
 from .security import require_api_key
 
-INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "change-me-in-production")
+INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET")
 PROXY_TIMEOUT = int(os.environ.get("PROXY_TIMEOUT_SECONDS", "15"))
 
 HOP_BY_HOP = {
@@ -23,6 +26,24 @@ bp = Blueprint("gateway", __name__, url_prefix="/api/v1")
 
 def _normalize(path: str) -> str:
     return path.strip("/")
+
+
+def _is_allowed_service_url(value: str) -> bool:
+    """Reject non-HTTP and obvious private/loopback targets before forwarding."""
+    try:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
+            return False
+        host = parsed.hostname.lower()
+        if host == "localhost" or host.endswith(".local"):
+            return False
+        try:
+            address = ip_address(host)
+            return not (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved)
+        except ValueError:
+            return True
+    except Exception:
+        return False
 
 
 def _resolve_service(app_name: str):
@@ -117,6 +138,15 @@ def route(app_name: str, endpoint: str):
                 {"error": f"Endpoint {request.method} /{endpoint} is not registered on '{app_name}'."}
             ), 403
 
+        if not INTERNAL_SECRET:
+            current_app.logger.error("Gateway request rejected because INTERNAL_SECRET is not configured")
+            status = 503
+            return jsonify({"error": "Gateway is not configured for service forwarding."}), 503
+        if not _is_allowed_service_url(service["webhook_url"]):
+            current_app.logger.error("Gateway request rejected because service %s has an unsafe webhook URL", service["name"])
+            status = 502
+            return jsonify({"error": "Registered service URL is not permitted."}), 502
+
         target_url = f"{service['webhook_url'].rstrip('/')}/{endpoint.lstrip('/')}"
         headers = {
             "Content-Type": request.headers.get("Content-Type", "application/json"),
@@ -134,6 +164,7 @@ def route(app_name: str, endpoint: str):
             params=request.args,
             data=request.get_data(),
             timeout=PROXY_TIMEOUT,
+            allow_redirects=False,
         )
         status = resp.status_code
         out_headers = {
@@ -141,16 +172,14 @@ def route(app_name: str, endpoint: str):
         }
         return Response(resp.content, status=resp.status_code, headers=out_headers)
 
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.RequestException:
+        current_app.logger.warning("Gateway could not reach service %s", app_name)
         status = 502
-        return jsonify(
-            {"error": f"Failed to reach service '{app_name}'.", "details": str(e)}
-        ), 502
-    except Exception as e:
+        return jsonify({"error": f"Failed to reach service '{app_name}'."}), 502
+    except Exception:
+        current_app.logger.exception("Gateway routing exception for service %s", app_name)
         status = 500
-        return jsonify(
-            {"error": "Gateway routing exception.", "details": str(e)}
-        ), 500
+        return jsonify({"error": "Gateway routing exception."}), 500
     finally:
         _log(status, (time.time() - start) * 1000, service)
 
@@ -171,7 +200,7 @@ def heartbeat(app_name: str):
         .execute()
     )
     svc = res.data
-    if not svc or svc["webhook_secret"] != secret:
+    if not svc or not secret or not compare_digest(svc["webhook_secret"], secret):
         return jsonify({"error": "Unauthorized heartbeat"}), 403
 
     body = request.get_json(silent=True) or {}

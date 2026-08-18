@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template
 
 load_dotenv()
 
@@ -43,17 +43,38 @@ def create_app() -> Flask:
     def dashboard():
         return render_template("dashboard.html", **template_context())
 
-    # --- SYSTEM HEALTH (keeps Render + Supabase awake) ---
+    # --- SYSTEM HEALTH ---
 
-    @app.route("/ping")
-    def ping():
+    @app.route("/healthz")
+    def healthz():
+        """Liveness check for Render: the Flask process is accepting requests."""
+        return jsonify({"service": "meteorbase", "status": "ok"}), 200
+
+    @app.route("/readyz")
+    def readyz():
+        """Readiness check: required secrets exist and Supabase is reachable."""
+        required = (
+            "SUPABASE_URL",
+            "SUPABASE_SERVICE_KEY",
+            "SUPABASE_JWT_SECRET",
+            "INTERNAL_SECRET",
+        )
+        missing = [name for name in required if not os.environ.get(name)]
+        if missing:
+            return jsonify({"status": "not_ready", "missing": missing}), 503
+
         try:
             from meteorbase.db import get_supabase
 
             get_supabase().table("profiles").select("id").limit(1).execute()
-            return "OK - MeteorBase and Supabase are both awake!", 200
-        except Exception as e:
-            return f"Database error: {str(e)}", 500
+            return jsonify({"service": "meteorbase", "status": "ready"}), 200
+        except Exception:
+            app.logger.exception("MeteorBase readiness check failed")
+            return jsonify({"status": "not_ready", "reason": "database_unavailable"}), 503
+
+    @app.route("/ping")
+    def ping():
+        return readyz()
 
     return app
 

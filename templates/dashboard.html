@@ -351,7 +351,7 @@
         // USER API KEYS (client-side via Supabase, scoped to the user's row)
         // ----------------------------------------------------------------
         async function loadApiKeys(userId) {
-            const { data, error } = await supabase.table('api_keys').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+            const { data, error } = await supabase.from('api_keys').select('*').eq('user_id', userId).order('created_at', { ascending: false });
             const tbody = document.getElementById('apiKeyTableBody');
             tbody.innerHTML = '';
 
@@ -380,7 +380,7 @@
             const rawKey = crypto.randomUUID() + '-' + crypto.randomUUID();
             const name = (document.getElementById('newKeyName').value || 'default').trim();
 
-            const { error } = await supabase.table('api_keys').insert({
+            const { error } = await supabase.from('api_keys').insert({
                 user_id: session.user.id,
                 api_key: rawKey,
                 name
@@ -397,7 +397,7 @@
 
         async function deleteKey(keyId) {
             const { data: { session } } = await supabase.auth.getSession();
-            const { error } = await supabase.table('api_keys').delete().eq('id', keyId);
+            const { error } = await supabase.from('api_keys').delete().eq('id', keyId);
             if (!error) {
                 showAlert('API Key revoked successfully.', 'success');
                 loadApiKeys(session.user.id);

@@ -6,7 +6,7 @@ These are intentionally read-only and never expose internal secrets
 import os
 
 import jwt
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from .db import get_supabase
 
@@ -23,9 +23,10 @@ bp = Blueprint("registry", __name__, url_prefix="/api/v1")
 
 def _db():
     try:
-        return get_supabase()
-    except RuntimeError as e:
-        return None, str(e)
+        return get_supabase(), None
+    except Exception:
+        current_app.logger.exception("MeteorBase registry database connection failed")
+        return None, "Registry database is unavailable"
 
 
 @bp.route("/apps", methods=["GET"])

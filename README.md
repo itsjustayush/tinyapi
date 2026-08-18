@@ -61,6 +61,8 @@ templates/                landing / auth / dashboard
    python app.py
    ```
    → http://localhost:5000
+
+   For Render, use `pip install -r requirements.txt` as the build command and `gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 30 app:app` as the start command. The included `render.yaml` declares the same setup and uses `/healthz` for process health. Configure every required environment variable in Render; never commit a `.env` file.
 4. **Sign in**, generate an API key, and register your first app (Oblivion, VEX, ...).
 5. Follow `docs/INTEGRATION_GUIDE.md` to wire the app's webhook receiver.
 
@@ -72,6 +74,8 @@ GET  /api/v1/apps
 GET  /api/v1/apps/<name>
 GET  /api/v1/apps/<name>/endpoints
 GET  /api/v1/me
+GET  /healthz                          # Render liveness
+GET  /readyz                           # Supabase and configuration readiness
 
 # Gateway (requires X-API-Key)
 ANY  /api/v1/<app_name>/<path>        # proxied to the registered webhook

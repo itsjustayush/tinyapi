@@ -11,6 +11,7 @@ from .db import get_supabase
 
 JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "120"))
+API_KEY_PREFIX = "mb_live_"
 
 # Simple in-memory fixed-window rate limiter (single instance).
 _window_start = time.time()
@@ -42,14 +43,21 @@ def _rate_limit(scope: str) -> bool:
     return True
 
 
+def canonical_api_key(value: str) -> str:
+    """Accept the documented mb_live_ key form while preserving legacy keys."""
+    return value[len(API_KEY_PREFIX):] if value.startswith(API_KEY_PREFIX) else value
+
+
 def require_api_key(f):
     """Validate the X-API-Key header and inject g.user_id / g.api_key_id."""
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        api_key = request.headers.get("X-API-Key")
-        if not api_key:
+        presented_key = request.headers.get("X-API-Key", "").strip()
+        if not presented_key:
             return jsonify({"error": "Missing X-API-Key header"}), 401
+
+        api_key = canonical_api_key(presented_key)
 
         if not _rate_limit(api_key):
             return jsonify({"error": "Rate limit exceeded. Try again shortly."}), 429

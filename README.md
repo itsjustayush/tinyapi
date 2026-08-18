@@ -48,7 +48,7 @@ templates/                landing / auth / dashboard
 
 ## Setup
 
-1. **Supabase** — run `supabase/schema.sql` in the Supabase SQL Editor.
+1. **Supabase** — run `supabase/schema.sql` in the Supabase SQL Editor. If this project already has an earlier/minimal `services` table, run `supabase/repair_schema.sql` first, then run `supabase/schema.sql` to apply the current access-control policies and grants. The repair creates only structural database objects; it never inserts placeholder services, keys, or webhook records.
 2. **Environment** — copy `.env.example` to `.env` and fill in:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`

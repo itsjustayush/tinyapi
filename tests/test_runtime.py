@@ -26,6 +26,20 @@ class RuntimeHealthTests(unittest.TestCase):
         self.assertEqual(response.get_json()["status"], "not_ready")
         self.assertIn("SUPABASE_URL", response.get_json()["missing"])
 
+    @patch("meteorbase.db.verify_gateway_schema")
+    def test_readiness_fails_closed_when_the_gateway_schema_is_incomplete(self, verify_schema):
+        required = {
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_KEY": "service-role-key",
+            "SUPABASE_JWT_SECRET": "jwt-secret",
+            "INTERNAL_SECRET": "internal-secret",
+        }
+        verify_schema.side_effect = RuntimeError("missing services.display_name")
+        with patch.dict(os.environ, required, clear=True):
+            response = self.client.get("/readyz")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json(), {"status": "not_ready", "reason": "schema_or_database_unavailable"})
+
     @patch("meteorbase.registry.get_supabase")
     def test_public_registry_reports_a_controlled_error_when_supabase_is_unavailable(self, mocked_client):
         mocked_client.side_effect = RuntimeError("connection unavailable")

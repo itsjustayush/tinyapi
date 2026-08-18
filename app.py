@@ -64,13 +64,13 @@ def create_app() -> Flask:
             return jsonify({"status": "not_ready", "missing": missing}), 503
 
         try:
-            from meteorbase.db import get_supabase
+            from meteorbase.db import verify_gateway_schema
 
-            get_supabase().table("profiles").select("id").limit(1).execute()
+            verify_gateway_schema()
             return jsonify({"service": "meteorbase", "status": "ready"}), 200
         except Exception:
             app.logger.exception("MeteorBase readiness check failed")
-            return jsonify({"status": "not_ready", "reason": "database_unavailable"}), 503
+            return jsonify({"status": "not_ready", "reason": "schema_or_database_unavailable"}), 503
 
     @app.route("/ping")
     def ping():

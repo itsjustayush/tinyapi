@@ -62,7 +62,7 @@ templates/                landing / auth / dashboard
    ```
    → http://localhost:5000
 
-   For Render, use `pip install -r requirements.txt` as the build command and `gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 30 app:app` as the start command. The included `render.yaml` declares the same setup and uses `/healthz` for process health. Configure every required environment variable in Render; never commit a `.env` file.
+   For Render, use `pip install -r requirements.txt` as the build command and `gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 30 app:app` as the start command. The included `render.yaml` declares the same setup and uses `/healthz` for process health. Configure every required environment variable in Render; `SUPABASE_SERVICE_KEY` is preferred, while the legacy `SUPABASE_KEY` alias is also supported. Never commit a `.env` file.
 4. **Sign in**, generate an API key, and register your first app (Oblivion, VEX, ...).
 5. Follow `docs/INTEGRATION_GUIDE.md` to wire the app's webhook receiver.
 

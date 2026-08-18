@@ -53,13 +53,10 @@ def create_app() -> Flask:
     @app.route("/readyz")
     def readyz():
         """Readiness check: required secrets exist and Supabase is reachable."""
-        required = (
-            "SUPABASE_URL",
-            "SUPABASE_SERVICE_KEY",
-            "SUPABASE_JWT_SECRET",
-            "INTERNAL_SECRET",
-        )
+        required = ("SUPABASE_URL", "SUPABASE_JWT_SECRET", "INTERNAL_SECRET")
         missing = [name for name in required if not os.environ.get(name)]
+        if not (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")):
+            missing.append("SUPABASE_SERVICE_KEY or SUPABASE_KEY")
         if missing:
             return jsonify({"status": "not_ready", "missing": missing}), 503
 

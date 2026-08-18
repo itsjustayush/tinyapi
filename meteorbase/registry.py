@@ -29,13 +29,21 @@ def _db():
         return None, "Registry database is unavailable"
 
 
+def _query_error():
+    current_app.logger.exception("MeteorBase registry database query failed")
+    return jsonify({"error": "Registry schema or database is unavailable"}), 503
+
+
 @bp.route("/apps", methods=["GET"])
 def list_apps():
     db, err = _db()
     if db is None:
         return jsonify({"error": err}), 503
-    res = db.table("services").select(SAFE_COLS).order("name").execute()
-    return jsonify({"apps": res.data})
+    try:
+        res = db.table("services").select(SAFE_COLS).order("name").execute()
+        return jsonify({"apps": res.data})
+    except Exception:
+        return _query_error()
 
 
 @bp.route("/apps/<name>", methods=["GET"])
@@ -43,13 +51,16 @@ def get_app(name: str):
     db, err = _db()
     if db is None:
         return jsonify({"error": err}), 503
-    res = (
-        db.table("services")
-        .select(SAFE_COLS)
-        .eq("name", name.lower())
-        .maybe_single()
-        .execute()
-    )
+    try:
+        res = (
+            db.table("services")
+            .select(SAFE_COLS)
+            .eq("name", name.lower())
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        return _query_error()
     if not res.data:
         return jsonify({"error": f"App '{name}' not found"}), 404
     return jsonify({"app": res.data})
@@ -60,23 +71,29 @@ def list_endpoints(name: str):
     db, err = _db()
     if db is None:
         return jsonify({"error": err}), 503
-    svc = (
-        db.table("services")
-        .select("id")
-        .eq("name", name.lower())
-        .maybe_single()
-        .execute()
-    )
+    try:
+        svc = (
+            db.table("services")
+            .select("id")
+            .eq("name", name.lower())
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        return _query_error()
     if not svc.data:
         return jsonify({"error": f"App '{name}' not found"}), 404
-    res = (
-        db.table("service_endpoints")
-        .select("id, method, path, description, requires_auth")
-        .eq("service_id", svc.data["id"])
-        .order("method")
-        .execute()
-    )
-    return jsonify({"endpoints": res.data})
+    try:
+        res = (
+            db.table("service_endpoints")
+            .select("id, method, path, description, requires_auth")
+            .eq("service_id", svc.data["id"])
+            .order("method")
+            .execute()
+        )
+        return jsonify({"endpoints": res.data})
+    except Exception:
+        return _query_error()
 
 
 @bp.route("/me", methods=["GET"])
@@ -96,13 +113,16 @@ def me():
     db, err = _db()
     if db is None:
         return jsonify({"error": err}), 503
-    res = (
-        db.table("profiles")
-        .select("id, email, role")
-        .eq("id", payload.get("sub"))
-        .maybe_single()
-        .execute()
-    )
+    try:
+        res = (
+            db.table("profiles")
+            .select("id, email, role")
+            .eq("id", payload.get("sub"))
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        return _query_error()
     if not res.data:
         return jsonify({"error": "Profile not found"}), 404
     return jsonify({"user": res.data})

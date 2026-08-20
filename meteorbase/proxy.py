@@ -1,10 +1,12 @@
-"""The core MeteorBase proxy: dynamic routing to registered child apps."""
+from __future__ import annotations
+
 import os
 import time
-from hmac import compare_digest
 from datetime import datetime, timezone
+from hmac import compare_digest
 from ipaddress import ip_address
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import requests
 from flask import Blueprint, Response, current_app, g, jsonify, request
@@ -12,206 +14,163 @@ from flask import Blueprint, Response, current_app, g, jsonify, request
 from .db import get_supabase
 from .security import require_api_key
 
-INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET")
-PROXY_TIMEOUT = int(os.environ.get("PROXY_TIMEOUT_SECONDS", "15"))
-
-HOP_BY_HOP = {
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailer", "transfer-encoding", "upgrade", "content-length",
-    "content-encoding",
-}
+INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
+PROXY_TIMEOUT = max(1, int(os.environ.get("PROXY_TIMEOUT_SECONDS", "15")))
+HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "content-length", "content-encoding"}
+PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
 bp = Blueprint("gateway", __name__, url_prefix="/api/v1")
 
 
-def _normalize(path: str) -> str:
-    return path.strip("/")
+def _normalize_path(path: str) -> str:
+    cleaned = "/" + str(path or "").strip().strip("/")
+    return cleaned if cleaned == "/" else cleaned.rstrip("/")
 
 
-def _is_allowed_service_url(value: str) -> bool:
-    """Reject non-HTTP and obvious private/loopback targets before forwarding."""
+def _safe_service_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             return False
-        host = parsed.hostname.lower()
-        if host == "localhost" or host.endswith(".local"):
+        host = parsed.hostname.lower().rstrip(".")
+        if host in {"localhost", "127.0.0.1", "::1", "metadata.google.internal", "host.docker.internal"} or host.endswith(".local"):
             return False
         try:
             address = ip_address(host)
-            return not (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved)
+            return not (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_unspecified)
         except ValueError:
             return True
     except Exception:
         return False
 
 
-def _resolve_service(app_name: str):
-    db = get_supabase()
-    res = (
-        db.table("services")
-        .select("id, name, webhook_url, webhook_secret, is_active")
-        .eq("name", app_name.lower())
-        .maybe_single()
-        .execute()
-    )
-    return res.data
+def _resolve_service(name: str):
+    result = get_supabase().table("services").select("id, name, webhook_url, webhook_secret, is_active").eq("name", name.strip().lower()).maybe_single().execute()
+    return result.data
 
 
-def _has_service_access(api_key_id: str, service_id: str) -> bool:
-    """Empty scope set = unrestricted key (all services)."""
-    db = get_supabase()
-    res = (
-        db.table("api_key_service_access")
-        .select("service_id")
-        .eq("api_key_id", api_key_id)
-        .execute()
-    )
-    if not res.data:
-        return True
-    return any(r["service_id"] == service_id for r in res.data)
+def _service_access(api_key_id: str, service_id: str) -> bool:
+    rows = get_supabase().table("api_key_service_access").select("service_id").eq("api_key_id", api_key_id).execute().data or []
+    return not rows or any(item.get("service_id") == service_id for item in rows)
 
 
 def _endpoint_allowed(service_id: str, method: str, path: str) -> bool:
-    """Validate method + path against the app's registered metadata.
-
-    If the app has not registered endpoints yet, the gateway runs in
-    open mode so you can bootstrap quickly - register endpoints via the
-    admin API to lock the app down.
-    """
-    db = get_supabase()
-    res = (
-        db.table("service_endpoints")
-        .select("method, path")
-        .eq("service_id", service_id)
-        .execute()
-    )
-    if not res.data:
+    rows = get_supabase().table("service_endpoints").select("method, path").eq("service_id", service_id).execute().data or []
+    if not rows:
         return True
-    return any(
-        r["method"].upper() == method.upper()
-        and _normalize(r["path"]) == _normalize(path)
-        for r in res.data
-    )
+    return any(item.get("method", "").upper() == method.upper() and _normalize_path(item.get("path", "")) == _normalize_path(path) for item in rows)
 
 
-def _log(status: int, latency_ms: int, service: dict | None):
+def _log_request(status: int, latency_ms: int, service: dict | None):
     try:
-        db = get_supabase()
-        db.table("request_logs").insert(
-            {
-                "user_id": getattr(g, "user_id", None),
-                "api_key_id": getattr(g, "api_key_id", None),
-                "service_id": service["id"] if service else None,
-                "service_name": service["name"] if service else None,
-                "method": request.method,
-                "path": request.full_path.rstrip("?"),
-                "status_code": status,
-                "latency_ms": int(latency_ms),
-                "remote_ip": request.remote_addr,
-            }
-        ).execute()
+        get_supabase().table("request_logs").insert({
+            "user_id": getattr(g, "user_id", None),
+            "api_key_id": getattr(g, "api_key_id", None),
+            "service_id": service.get("id") if service else None,
+            "service_name": service.get("name") if service else None,
+            "method": request.method,
+            "path": request.full_path.rstrip("?"),
+            "status_code": status,
+            "latency_ms": int(latency_ms),
+            "remote_ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        }).execute()
     except Exception:
-        pass
+        current_app.logger.warning("Unable to persist gateway request log", exc_info=True)
 
 
-@bp.route("/<app_name>/<path:endpoint>", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@bp.route("/<app_name>", defaults={"endpoint": ""}, methods=PROXY_METHODS)
+@bp.route("/<app_name>/<path:endpoint>", methods=PROXY_METHODS)
 @require_api_key
 def route(app_name: str, endpoint: str):
-    start = time.time()
+    started = time.perf_counter()
     status = 500
     service = None
+    request_id = request.headers.get("X-Request-ID", str(uuid4()))[:128]
     try:
         service = _resolve_service(app_name)
         if not service:
             status = 404
-            return jsonify({"error": f"Service '{app_name}' is not registered."}), 404
-        if not service["is_active"]:
+            return jsonify({"error": f"Service '{app_name}' is not registered"}), status
+        if not service.get("is_active"):
             status = 403
-            return jsonify({"error": f"Service '{app_name}' is disabled."}), 403
-        if not _has_service_access(g.api_key_id, service["id"]):
+            return jsonify({"error": f"Service '{app_name}' is disabled"}), status
+        if not _service_access(g.api_key_id, service["id"]):
             status = 403
-            return jsonify({"error": f"API key has no access to '{app_name}'."}), 403
-        if not _endpoint_allowed(service["id"], request.method, endpoint):
+            return jsonify({"error": f"API key has no access to '{app_name}'"}), status
+        if not _endpoint_allowed(service["id"], request.method, f"/{endpoint}" if endpoint else "/"):
             status = 403
-            return jsonify(
-                {"error": f"Endpoint {request.method} /{endpoint} is not registered on '{app_name}'."}
-            ), 403
-
+            return jsonify({"error": "Endpoint is not registered for this service"}), status
         if not INTERNAL_SECRET:
-            current_app.logger.error("Gateway request rejected because INTERNAL_SECRET is not configured")
             status = 503
-            return jsonify({"error": "Gateway is not configured for service forwarding."}), 503
-        if not _is_allowed_service_url(service["webhook_url"]):
-            current_app.logger.error("Gateway request rejected because service %s has an unsafe webhook URL", service["name"])
+            return jsonify({"error": "Gateway forwarding is not configured"}), status
+        if not service.get("webhook_secret") or not _safe_service_url(service.get("webhook_url", "")):
             status = 502
-            return jsonify({"error": "Registered service URL is not permitted."}), 502
+            return jsonify({"error": "Registered service URL is not permitted"}), status
 
-        target_url = f"{service['webhook_url'].rstrip('/')}/{endpoint.lstrip('/')}"
-        headers = {
-            "Content-Type": request.headers.get("Content-Type", "application/json"),
+        target = f"{service['webhook_url'].rstrip('/')}/{endpoint.lstrip('/')}" if endpoint else service["webhook_url"]
+        forward_headers = {
             "Accept": request.headers.get("Accept", "application/json"),
             "X-Internal-Secret": INTERNAL_SECRET,
             "X-Service-Secret": service["webhook_secret"],
-            "X-User-ID": g.user_id,
+            "X-User-ID": str(g.user_id),
             "X-Service-Name": service["name"],
+            "X-MeteorBase-Request-ID": request_id,
         }
+        if request.headers.get("Content-Type"):
+            forward_headers["Content-Type"] = request.headers["Content-Type"]
+        if request.headers.get("User-Agent"):
+            forward_headers["X-MeteorBase-Client"] = request.headers["User-Agent"][:240]
 
-        resp = requests.request(
+        upstream = requests.request(
             method=request.method,
-            url=target_url,
-            headers=headers,
+            url=target,
             params=request.args,
-            data=request.get_data(),
-            timeout=PROXY_TIMEOUT,
+            headers=forward_headers,
+            data=request.get_data(cache=False),
+            timeout=(5, PROXY_TIMEOUT),
             allow_redirects=False,
         )
-        status = resp.status_code
-        out_headers = {
-            k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP
-        }
-        return Response(resp.content, status=resp.status_code, headers=out_headers)
-
-    except requests.exceptions.RequestException:
-        current_app.logger.warning("Gateway could not reach service %s", app_name)
+        status = upstream.status_code
+        response_headers = {key: value for key, value in upstream.headers.items() if key.lower() not in HOP_BY_HOP}
+        response_headers["X-MeteorBase-Request-ID"] = request_id
+        return Response(upstream.content, status=status, headers=response_headers)
+    except requests.RequestException:
+        current_app.logger.warning("Gateway could not reach service %s", app_name, exc_info=True)
         status = 502
-        return jsonify({"error": f"Failed to reach service '{app_name}'."}), 502
+        return jsonify({"error": f"Failed to reach service '{app_name}'", "request_id": request_id}), status
     except Exception:
         current_app.logger.exception("Gateway routing exception for service %s", app_name)
         status = 500
-        return jsonify({"error": "Gateway routing exception."}), 500
+        return jsonify({"error": "Gateway routing exception", "request_id": request_id}), status
     finally:
-        _log(status, (time.time() - start) * 1000, service)
+        _log_request(status, round((time.perf_counter() - started) * 1000), service)
 
 
-# --- App-side heartbeat: each child app pings this for uptime ---
-@bp.route("/apps/<app_name>/heartbeat", methods=["POST"])
+@bp.post("/apps/<app_name>/heartbeat")
 def heartbeat(app_name: str):
-    secret = request.headers.get("X-Service-Secret")
+    provided = request.headers.get("X-Service-Secret", "")
+    if not provided:
+        return jsonify({"error": "Missing X-Service-Secret"}), 401
     try:
         db = get_supabase()
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 503
-    res = (
-        db.table("services")
-        .select("id, webhook_secret, is_active")
-        .eq("name", app_name.lower())
-        .maybe_single()
-        .execute()
-    )
-    svc = res.data
-    if not svc or not secret or not compare_digest(svc["webhook_secret"], secret):
-        return jsonify({"error": "Unauthorized heartbeat"}), 403
-
-    body = request.get_json(silent=True) or {}
-    now = datetime.now(timezone.utc).isoformat()
-    db.table("service_heartbeats").insert(
-        {
-            "service_id": svc["id"],
-            "status": body.get("status", "ok"),
-            "latency_ms": int(body.get("latency_ms", 0)),
-            "details": body.get("details"),
-        }
-    ).execute()
-    db.table("services").update({"last_seen_at": now}).eq("id", svc["id"]).execute()
-    return jsonify({"ok": True, "service": app_name, "ts": now}), 200
+        result = db.table("services").select("id, name, webhook_secret, is_active").eq("name", app_name.strip().lower()).maybe_single().execute()
+        service = result.data
+        if not service or not service.get("is_active") or not compare_digest(provided, service.get("webhook_secret", "")):
+            return jsonify({"error": "Unauthorized heartbeat"}), 403
+        body = request.get_json(silent=True) or {}
+        try:
+            latency_ms = max(0, min(int(body.get("latency_ms", 0)), 60000))
+        except (TypeError, ValueError):
+            latency_ms = 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        db.table("service_heartbeats").insert({
+            "service_id": service["id"],
+            "status": str(body.get("status", "ok"))[:40],
+            "latency_ms": latency_ms,
+            "details": body.get("details") if isinstance(body.get("details"), dict) else None,
+        }).execute()
+        db.table("services").update({"last_seen_at": timestamp}).eq("id", service["id"]).execute()
+        return jsonify({"ok": True, "service": service["name"], "ts": timestamp}), 200
+    except Exception:
+        current_app.logger.exception("Heartbeat processing failed")
+        return jsonify({"error": "Heartbeat service unavailable"}), 503

@@ -1,49 +1,48 @@
-"""
-Minimal MeteorBase client - use this inside any of your client apps
-(web frontends, server jobs, scripts) to talk to EVERY service through
-the single MeteorBase gateway.
+"""Tiny Python client for calling any registered MeteorBase service."""
+from __future__ import annotations
 
-    mb = MeteorBase("https://your-meteorbase.onrender.com", "mb_live_<key>")
-    sessions = mb.get("oblivion", "/sessions")
-    mb.post("oblivion", "/sessions", json={"title": "Focus block"})
-"""
+import os
+from typing import Any
+
 import requests
 
 
 class MeteorBase:
-    def __init__(self, base_url: str, api_key: str):
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+    def __init__(self, api_key: str | None = None, base_url: str | None = None, timeout: int = 15):
+        self.base_url = (base_url or os.environ.get("METEORBASE_URL", "https://tinyapi-urjr.onrender.com")).rstrip("/")
+        self.api_key = api_key or os.environ["MB_API_KEY"]
+        self.timeout = timeout
 
-    def request(self, app: str, method: str, path: str, **kwargs):
-        url = f"{self.base_url}/api/v1/{app}/{path.lstrip('/')}"
-        headers = {"X-API-Key": self.api_key, **kwargs.pop("headers", {})}
-        resp = requests.request(method, url, headers=headers, **kwargs)
-        resp.raise_for_status()
-        if resp.status_code == 204:
-            return None
-        return resp.json()
+    def request(self, method: str, service: str, path: str, **kwargs: Any) -> requests.Response:
+        headers = dict(kwargs.pop("headers", {}) or {})
+        headers["X-API-Key"] = self.api_key
+        headers.setdefault("Accept", "application/json")
+        return requests.request(
+            method=method,
+            url=f"{self.base_url}/api/v1/{service.strip('/')}/{path.lstrip('/')}",
+            headers=headers,
+            timeout=self.timeout,
+            **kwargs,
+        )
 
-    def get(self, app: str, path: str, params=None):
-        return self.request(app, "GET", path, params=params)
+    def get(self, service: str, path: str, **kwargs: Any) -> requests.Response:
+        return self.request("GET", service, path, **kwargs)
 
-    def post(self, app: str, path: str, **kwargs):
-        return self.request(app, "POST", path, **kwargs)
+    def post(self, service: str, path: str, **kwargs: Any) -> requests.Response:
+        return self.request("POST", service, path, **kwargs)
 
-    def put(self, app: str, path: str, **kwargs):
-        return self.request(app, "PUT", path, **kwargs)
+    def put(self, service: str, path: str, **kwargs: Any) -> requests.Response:
+        return self.request("PUT", service, path, **kwargs)
 
-    def patch(self, app: str, path: str, **kwargs):
-        return self.request(app, "PATCH", path, **kwargs)
+    def patch(self, service: str, path: str, **kwargs: Any) -> requests.Response:
+        return self.request("PATCH", service, path, **kwargs)
 
-    def delete(self, app: str, path: str, **kwargs):
-        return self.request(app, "DELETE", path, **kwargs)
-
-    def list_apps(self):
-        return requests.get(f"{self.base_url}/api/v1/apps").json()
+    def delete(self, service: str, path: str, **kwargs: Any) -> requests.Response:
+        return self.request("DELETE", service, path, **kwargs)
 
 
 if __name__ == "__main__":
-    mb = MeteorBase("http://localhost:5000", "YOUR_API_KEY")
-    print("Registered apps:", mb.list_apps())
-    print("Sessions:", mb.get("oblivion", "/sessions"))
+    client = MeteorBase()
+    response = client.get("oblivion", "/sessions")
+    response.raise_for_status()
+    print(response.json())

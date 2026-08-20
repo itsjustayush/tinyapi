@@ -1,186 +1,245 @@
-"""Admin API: register / manage child apps and their endpoints.
+from __future__ import annotations
 
-Every endpoint here requires an admin JWT (validated server-side via
-require_admin). Nothing is hardcoded - apps are created and updated
-from real form data and stored in Supabase.
-"""
-from flask import Blueprint, g, jsonify, request
+import re
+import secrets
+from urllib.parse import urlparse
+from uuid import UUID
+
+from flask import Blueprint, current_app, g, jsonify, request
 
 from .db import get_supabase
 from .security import require_admin
 
 bp = Blueprint("admin", __name__, url_prefix="/api/v1/admin")
+SERVICE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$")
+SERVICE_COLS = "id, name, display_name, description, webhook_url, is_active, owner_user_id, last_seen_at, created_at, updated_at"
 
-_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+
+def _uuid(value: str) -> bool:
+    try:
+        UUID(value)
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
-@bp.route("/services", methods=["GET"])
+def _json_error(message: str, status: int = 400):
+    return jsonify({"error": message}), status
+
+
+def _service_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+        return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+    except Exception:
+        return False
+
+
+def _normalize_endpoint(raw: dict) -> dict:
+    method = str(raw.get("method", "GET")).upper().strip()
+    path = str(raw.get("path", "/")).strip()
+    if not path.startswith("/"):
+        path = f"/{path}"
+    if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+        raise ValueError("method must be GET, POST, PUT, PATCH, DELETE, HEAD, or OPTIONS")
+    if len(path) > 240 or ".." in path:
+        raise ValueError("path must be a safe absolute route")
+    return {
+        "method": method,
+        "path": path,
+        "description": str(raw.get("description") or "").strip()[:240] or None,
+        "requires_auth": bool(raw.get("requires_auth", True)),
+    }
+
+
+@bp.get("/services")
 @require_admin
 def list_services():
-    db = get_supabase()
-    res = (
-        db.table("services")
-        .select("*, service_endpoints(id, method, path, description, requires_auth)")
-        .order("name")
-        .execute()
-    )
-    return jsonify({"services": res.data})
+    try:
+        result = get_supabase().table("services").select(SERVICE_COLS).order("name").execute()
+        return jsonify({"services": result.data or []})
+    except Exception:
+        current_app.logger.exception("Could not list services")
+        return jsonify({"error": "Could not load services"}), 503
 
 
-@bp.route("/services", methods=["POST"])
+@bp.post("/services")
 @require_admin
 def create_service():
-    data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip().lower()
-    webhook_url = (data.get("webhook_url") or "").strip().rstrip("/")
-    if not name or not webhook_url:
-        return jsonify({"error": "name and webhook_url are required"}), 400
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name") or "").strip().lower()
+    display_name = str(body.get("display_name") or name).strip()[:100]
+    description = str(body.get("description") or "").strip()[:500] or None
+    webhook_url = str(body.get("webhook_url") or "").strip().rstrip("/")
+    if not SERVICE_NAME_RE.fullmatch(name):
+        return _json_error("name must be a lowercase slug with 3–50 characters")
+    if not _service_url(webhook_url):
+        return _json_error("webhook_url must be an absolute http(s) URL")
 
-    db = get_supabase()
+    webhook_secret = f"ms_{secrets.token_urlsafe(32)}"
+    record = {
+        "name": name,
+        "display_name": display_name or name,
+        "description": description,
+        "webhook_url": webhook_url,
+        "webhook_secret": webhook_secret,
+        "is_active": bool(body.get("is_active", True)),
+        "owner_user_id": body.get("owner_user_id") if _uuid(str(body.get("owner_user_id"))) else None,
+    }
     try:
-        res = db.table("services").insert(
-            {
-                "name": name,
-                "display_name": (data.get("display_name") or "").strip() or None,
-                "description": (data.get("description") or "").strip() or None,
-                "webhook_url": webhook_url,
-                "owner_user_id": g.user_id,
-            }
-        ).execute()
-        row = res.data[0]
-        return jsonify({"ok": True, "service": row}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        db = get_supabase()
+        created = db.table("services").insert(record).execute().data
+        if not created:
+            return _json_error("Could not create service", 500)
+        service = created[0]
+        endpoints = body.get("endpoints") or []
+        if not isinstance(endpoints, list):
+            return _json_error("endpoints must be a list")
+        normalized = [{"service_id": service["id"], **_normalize_endpoint(endpoint)} for endpoint in endpoints]
+        if normalized:
+            db.table("service_endpoints").insert(normalized).execute()
+        public = {key: service.get(key) for key in SERVICE_COLS.split(", ")}
+        return jsonify({"service": public, "service_secret": webhook_secret, "warning": "Store this service secret in the receiver app. It will not be shown again."}), 201
+    except ValueError as exc:
+        return _json_error(str(exc))
+    except Exception:
+        current_app.logger.exception("Could not create service")
+        return _json_error("Could not create service", 503)
 
 
-@bp.route("/services/<service_id>", methods=["PATCH"])
+@bp.patch("/services/<service_id>")
 @require_admin
 def update_service(service_id: str):
-    data = request.get_json(silent=True) or {}
-    db = get_supabase()
-    allowed = {"name", "display_name", "description", "webhook_url", "is_active"}
-    updates = {k: v for k, v in data.items() if k in allowed and v is not None}
-    if "name" in updates:
-        updates["name"] = updates["name"].strip().lower()
-    if "webhook_url" in updates:
-        updates["webhook_url"] = updates["webhook_url"].strip().rstrip("/")
+    if not _uuid(service_id):
+        return _json_error("Invalid service id")
+    body = request.get_json(silent=True) or {}
+    updates: dict = {}
+    for field in ("display_name", "description"):
+        if field in body:
+            updates[field] = str(body[field] or "").strip()[:500] or None
+    if "webhook_url" in body:
+        webhook_url = str(body["webhook_url"]).strip().rstrip("/")
+        if not _service_url(webhook_url):
+            return _json_error("webhook_url must be an absolute http(s) URL")
+        updates["webhook_url"] = webhook_url
+    if "is_active" in body:
+        updates["is_active"] = bool(body["is_active"])
     if not updates:
-        return jsonify({"error": "No valid fields to update"}), 400
+        return _json_error("No editable fields supplied")
     try:
-        res = (
-            db.table("services")
-            .update(updates)
-            .eq("id", service_id)
-            .execute()
-        )
-        if not res.data:
-            return jsonify({"error": "Service not found"}), 404
-        return jsonify({"ok": True, "service": res.data[0]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        result = get_supabase().table("services").update(updates).eq("id", service_id).execute()
+        if not result.data:
+            return _json_error("Service not found", 404)
+        return jsonify({"service": result.data[0]})
+    except Exception:
+        current_app.logger.exception("Could not update service")
+        return _json_error("Could not update service", 503)
 
 
-@bp.route("/services/<service_id>", methods=["DELETE"])
+@bp.delete("/services/<service_id>")
 @require_admin
 def delete_service(service_id: str):
-    db = get_supabase()
+    if not _uuid(service_id):
+        return _json_error("Invalid service id")
     try:
-        db.table("service_endpoints").delete().eq("service_id", service_id).execute()
-        res = db.table("services").delete().eq("id", service_id).execute()
-        if not res.data:
-            return jsonify({"error": "Service not found"}), 404
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        result = get_supabase().table("services").delete().eq("id", service_id).execute()
+        if not result.data:
+            return _json_error("Service not found", 404)
+        return jsonify({"deleted": True, "id": service_id})
+    except Exception:
+        current_app.logger.exception("Could not delete service")
+        return _json_error("Could not delete service", 503)
 
 
-@bp.route("/services/<service_id>/endpoints", methods=["GET"])
+@bp.post("/services/<service_id>/rotate-secret")
+@require_admin
+def rotate_secret(service_id: str):
+    if not _uuid(service_id):
+        return _json_error("Invalid service id")
+    secret = f"ms_{secrets.token_urlsafe(32)}"
+    try:
+        result = get_supabase().table("services").update({"webhook_secret": secret}).eq("id", service_id).execute()
+        if not result.data:
+            return _json_error("Service not found", 404)
+        return jsonify({"service_secret": secret, "warning": "Update the receiver before restarting traffic."})
+    except Exception:
+        current_app.logger.exception("Could not rotate service secret")
+        return _json_error("Could not rotate service secret", 503)
+
+
+@bp.get("/services/<service_id>/endpoints")
 @require_admin
 def list_service_endpoints(service_id: str):
-    db = get_supabase()
-    res = (
-        db.table("service_endpoints")
-        .select("id, method, path, description, requires_auth")
-        .eq("service_id", service_id)
-        .order("method")
-        .execute()
-    )
-    return jsonify({"endpoints": res.data})
-
-
-@bp.route("/services/<service_id>/endpoints", methods=["POST"])
-@require_admin
-def add_endpoints(service_id: str):
-    data = request.get_json(silent=True) or {}
-    items = data if isinstance(data, list) else [data]
-    payload = []
-    for it in items:
-        method = (it.get("method") or "").upper()
-        path = (it.get("path") or "").strip()
-        if method not in _METHODS or not path:
-            return jsonify({"error": "Each endpoint needs method and path"}), 400
-        payload.append(
-            {
-                "service_id": service_id,
-                "method": method,
-                "path": path,
-                "description": it.get("description"),
-                "requires_auth": bool(it.get("requires_auth", True)),
-            }
-        )
-    db = get_supabase()
+    if not _uuid(service_id):
+        return _json_error("Invalid service id")
     try:
-        res = db.table("service_endpoints").insert(payload).execute()
-        return jsonify({"ok": True, "endpoints": res.data}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        result = get_supabase().table("service_endpoints").select("id, service_id, method, path, description, requires_auth, created_at").eq("service_id", service_id).order("path").execute()
+        return jsonify({"endpoints": result.data or []})
+    except Exception:
+        current_app.logger.exception("Could not list endpoints")
+        return _json_error("Could not load endpoints", 503)
 
 
-@bp.route("/services/<service_id>/endpoints/<endpoint_id>", methods=["DELETE"])
+@bp.post("/services/<service_id>/endpoints")
 @require_admin
-def delete_endpoint(service_id: str, endpoint_id: str):
-    db = get_supabase()
+def create_service_endpoints(service_id: str):
+    if not _uuid(service_id):
+        return _json_error("Invalid service id")
+    body = request.get_json(silent=True) or {}
+    raw_items = body if isinstance(body, list) else body.get("endpoints", [body])
+    if not isinstance(raw_items, list) or not raw_items:
+        return _json_error("Provide one endpoint object or an endpoints list")
     try:
-        res = (
-            db.table("service_endpoints")
-            .delete()
-            .eq("id", endpoint_id)
-            .eq("service_id", service_id)
-            .execute()
-        )
-        if not res.data:
-            return jsonify({"error": "Endpoint not found"}), 404
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        records = [{"service_id": service_id, **_normalize_endpoint(item)} for item in raw_items]
+        result = get_supabase().table("service_endpoints").insert(records).execute()
+        return jsonify({"endpoints": result.data or []}), 201
+    except ValueError as exc:
+        return _json_error(str(exc))
+    except Exception:
+        current_app.logger.exception("Could not create endpoints")
+        return _json_error("Could not create endpoints", 503)
 
 
-@bp.route("/logs", methods=["GET"])
+@bp.delete("/services/<service_id>/endpoints/<endpoint_id>")
+@require_admin
+def delete_service_endpoint(service_id: str, endpoint_id: str):
+    if not _uuid(service_id) or not _uuid(endpoint_id):
+        return _json_error("Invalid service or endpoint id")
+    try:
+        result = get_supabase().table("service_endpoints").delete().eq("id", endpoint_id).eq("service_id", service_id).execute()
+        if not result.data:
+            return _json_error("Endpoint not found", 404)
+        return jsonify({"deleted": True, "id": endpoint_id})
+    except Exception:
+        current_app.logger.exception("Could not delete endpoint")
+        return _json_error("Could not delete endpoint", 503)
+
+
+@bp.get("/logs")
 @require_admin
 def logs():
-    db = get_supabase()
-    limit = min(int(request.args.get("limit", 100)), 500)
-    q = db.table("request_logs").select("*").order("created_at", desc=True).limit(limit)
-    service_name = request.args.get("service")
-    if service_name:
-        q = q.eq("service_name", service_name.lower())
-    res = q.execute()
-    return jsonify({"logs": res.data})
+    try:
+        limit = min(max(int(request.args.get("limit", 50)), 1), 200)
+    except ValueError:
+        limit = 50
+    try:
+        result = get_supabase().table("request_logs").select("id, user_id, api_key_id, service_id, service_name, method, path, status_code, latency_ms, remote_ip, created_at").order("created_at", desc=True).limit(limit).execute()
+        return jsonify({"logs": result.data or []})
+    except Exception:
+        current_app.logger.exception("Could not read request logs")
+        return _json_error("Could not load request logs", 503)
 
 
-@bp.route("/heartbeats", methods=["GET"])
+@bp.get("/heartbeats")
 @require_admin
 def heartbeats():
-    db = get_supabase()
-    limit = min(int(request.args.get("limit", 50)), 200)
-    q = (
-        db.table("service_heartbeats")
-        .select("*, services!inner(name)")
-        .order("created_at", desc=True)
-        .limit(limit)
-    )
-    service_name = request.args.get("service")
-    if service_name:
-        q = q.eq("services.name", service_name.lower())
-    res = q.execute()
-    return jsonify({"heartbeats": res.data})
+    try:
+        limit = min(max(int(request.args.get("limit", 50)), 1), 200)
+    except ValueError:
+        limit = 50
+    try:
+        result = get_supabase().table("service_heartbeats").select("id, service_id, status, latency_ms, details, created_at").order("created_at", desc=True).limit(limit).execute()
+        return jsonify({"heartbeats": result.data or []})
+    except Exception:
+        current_app.logger.exception("Could not read service heartbeats")
+        return _json_error("Could not load heartbeats", 503)

@@ -1,104 +1,141 @@
 # MeteorBase
 
-**One API. Every app you've ever built — VEX, SkipIdeate, Oblivion, and every future project.**
+**One API. Every app you ship.**
 
-MeteorBase is a **unified API gateway** that sits in front of all your apps. It is NOT an app
-with its own data model — it is the **middleman**:
+MeteorBase is a small, secure API hub for an ecosystem of independent microservices. A client uses one `X-API-Key` to call any registered service. MeteorBase validates the key, checks the service scope and endpoint allowlist, forwards the request with trusted server-to-server headers, logs the result, and returns the service response.
 
-- Your apps keep their own logic, routes, and databases and simply expose a **webhook receiver**.
-- Clients (your users, your other projects, your scripts) only ever talk to **MeteorBase**.
-- MeteorBase validates the user, their API key, the app's validity, and the endpoint metadata,
-  then forwards the request to the right app with trusted headers, logs the traffic, and returns
-  the app's response.
-- Apps ping MeteorBase for **uptime tracking**.
-
-All registration data (app names, webhook URLs, endpoint metadata, keys) lives in **Supabase**
-as real database rows — nothing is hardcoded.
+The production base URL is `https://tinyapi-urjr.onrender.com`.
 
 ## Architecture
 
-```
-CLIENT                              METEORBASE (gateway + Supabase)            YOUR APP (webhook)
-─────────                           ─────────────────────────────────          ─────────────────
-X-API-Key: mb_live_...   ───────▶   1. validate API key                        receiver endpoint
-GET /api/v1/oblivion/sessions       2. look up app by name in `services`  ─▶   validates
-                                    3. check key scope / app active           X-Internal-Secret
-                                    4. check endpoint allowlist               + X-Service-Secret
-                                    5. forward + log + time                    and returns data
-                                    6. pipe response back                    ◀─────────────────
+```text
+client app / script
+        |
+        | X-API-Key: mb_live_...
+        v
+https://tinyapi-urjr.onrender.com/api/v1/<service>/<path>
+        |
+        | validate key + scope + endpoint + active service
+        | add X-Internal-Secret + X-Service-Secret + X-User-ID
+        v
+registered microservice receiver
+        |
+        | verify trusted headers, run normal app route
+        v
+service response -> MeteorBase -> client
 ```
 
-## Repository layout
+MeteorBase owns the **control plane** rather than your product data. Each microservice keeps its own database and business logic. The gateway stores only routing metadata, authentication metadata, request telemetry, and service heartbeat data.
 
-```
-app.py                    Flask entrypoint (gunicorn app:app)
-meteorbase/
-  db.py                   Supabase client (service_role) singleton
-  security.py             X-API-Key + JWT admin decorators, rate limiting
-  registry.py             public metadata: /api/v1/apps, /apps/<name>, /me
-  proxy.py                the gateway proxy + /apps/<name>/heartbeat
-  admin.py                admin CRUD for services, endpoints, logs, heartbeats
-supabase/schema.sql       full schema + RLS (run in Supabase SQL Editor)
-docs/INTEGRATION_GUIDE.md how to wire your apps in as webhooks
-examples/
-  webhook_receiver.py     receiver template for any child app
-  meteorbase_client.py    Python client for calling the gateway
-templates/                landing / auth / dashboard
-```
+## What was rebuilt
+
+The repository now contains a hardened Flask gateway with Supabase Auth integration, Google OAuth through the Supabase project, server-side JWT validation, hashed client API keys, service scopes, service-secret rotation, endpoint allowlisting, SSRF guardrails, request logging, heartbeats, Render health checks, a new futuristic landing page, an authenticated console, and end-to-end integration documentation.
+
+New client keys are generated as `mb_live_...` values. Only a SHA-256 digest is stored in Supabase, and the raw secret is returned once. Existing deployments that still have a raw `api_key` column can run `supabase/migration_secure_keys.sql` before applying `supabase/schema.sql`.
 
 ## Setup
 
-1. **Supabase** — run `supabase/schema.sql` in the Supabase SQL Editor. If this project already has an earlier/minimal `services` table, run `supabase/repair_schema.sql` first, then run `supabase/schema.sql` to apply the current access-control policies and grants. The repair creates only structural database objects; it never inserts placeholder services, keys, or webhook records.
-2. **Environment** — copy `.env.example` to `.env` and fill in:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_KEY` (service_role — required so the server can read secrets + write logs)
-   - `SUPABASE_JWT_SECRET`
-   - `INTERNAL_SECRET` (a long random string shared with all your apps)
-3. **Run**
-   ```bash
-   pip install -r requirements.txt
-   python app.py
-   ```
-   → http://localhost:5000
+Run `supabase/schema.sql` in the Supabase SQL editor. Enable Google under **Authentication → Providers → Google**, and add `https://tinyapi-urjr.onrender.com/auth/callback` to the Supabase redirect allowlist. After the first account signs in, promote your admin profile:
 
-   For Render, use `pip install -r requirements.txt` as the build command and `gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 30 app:app` as the start command. The included `render.yaml` declares the same setup and uses `/healthz` for process health. Configure every required environment variable in Render; `SUPABASE_SERVICE_KEY` is preferred, while the legacy `SUPABASE_KEY` alias is also supported. Never commit a `.env` file.
-4. **Sign in**, generate an API key, and register your first app (Oblivion, VEX, ...).
-5. Follow `docs/INTEGRATION_GUIDE.md` to wire the app's webhook receiver.
+```sql
+update public.profiles
+set role = 'admin'
+where email = 'you@example.com';
+```
+
+Configure the variables from `.env.example`. The gateway requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_JWT_SECRET`, and a long random `INTERNAL_SECRET`. The service-role key must stay server-side and must never be inserted into a template.
+
+Run locally with:
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+python app.py
+```
+
+For Render, use `pip install -r requirements.txt` as the build command and:
+
+```bash
+gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 30 app:app
+```
+
+The included `render.yaml` uses `/healthz` for liveness. `/readyz` additionally verifies configuration and the required Supabase tables.
+
+## How you link a microservice as admin
+
+First, create the receiver route in the child app. Copy `examples/meteorbase_receiver.py` into that app, set `INTERNAL_SECRET` to the same random value used by MeteorBase, and set `METEORBASE_SERVICE_SECRET` to the secret returned by the registration response. The receiver should decorate its normal routes with `@require_meteorbase`.
+
+Next, sign in at `/auth`, open `/dashboard`, and register the service in the **Services** panel. Enter a lowercase slug such as `oblivion` and a public receiver URL such as `https://oblivion.onrender.com/meteorbase`. The create response returns `service_secret` once. Save it in the child app's secret manager. Do not put it in frontend code.
+
+Then, add endpoint rows. The gateway accepts a service in bootstrap mode when it has no endpoint rows. For production, add explicit `GET /sessions`, `POST /sessions`, or other routes so unknown paths are rejected before forwarding. You can create endpoint metadata through the admin console or `POST /api/v1/admin/services/<service_id>/endpoints`.
+
+Finally, create a client API key in the **API keys** panel. Store it as `MB_API_KEY` in the client server or script. The client calls `https://tinyapi-urjr.onrender.com/api/v1/oblivion/sessions`; it never needs to know the child service URL or service secret.
+
+A microservice can report its health with:
+
+```bash
+curl -X POST https://tinyapi-urjr.onrender.com/api/v1/apps/oblivion/heartbeat \
+  -H "X-Service-Secret: $METEORBASE_SERVICE_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"ok","latency_ms":38}'
+```
 
 ## API surface
 
-```
-# Public (metadata, no auth)
-GET  /api/v1/apps
-GET  /api/v1/apps/<name>
-GET  /api/v1/apps/<name>/endpoints
-GET  /api/v1/me
-GET  /healthz                          # Render liveness
-GET  /readyz                           # Supabase and configuration readiness
+| Method | Route | Authentication | Purpose |
+|---|---|---|---|
+| GET | `/healthz` | Public | Render liveness |
+| GET | `/readyz` | Public | Configuration and schema readiness |
+| GET | `/api/v1/apps` | Public | List active service metadata |
+| GET | `/api/v1/apps/:name` | Public | Read one active service |
+| GET | `/api/v1/apps/:name/endpoints` | Public | Read its endpoint catalog |
+| GET | `/api/v1/me` | Supabase bearer JWT | Read the signed-in profile |
+| GET | `/api/v1/keys` | Supabase bearer JWT | List the current user's key metadata |
+| POST | `/api/v1/keys` | Supabase bearer JWT | Create a hashed API key; raw secret shown once |
+| DELETE | `/api/v1/keys/:id` | Supabase bearer JWT | Revoke a key |
+| PUT | `/api/v1/keys/:id/scopes` | Supabase bearer JWT | Replace service scopes |
+| ANY | `/api/v1/:service/:path` | `X-API-Key` | Proxy a request to a registered service |
+| POST | `/api/v1/apps/:name/heartbeat` | `X-Service-Secret` | Update service uptime |
+| GET/POST/PATCH/DELETE | `/api/v1/admin/services...` | Admin bearer JWT | Manage services |
+| GET/POST/DELETE | `/api/v1/admin/services/:id/endpoints...` | Admin bearer JWT | Manage endpoint allowlists |
+| GET | `/api/v1/admin/logs` | Admin bearer JWT | Read gateway traffic |
+| GET | `/api/v1/admin/heartbeats` | Admin bearer JWT | Read uptime telemetry |
 
-# Gateway (requires X-API-Key)
-ANY  /api/v1/<app_name>/<path>        # proxied to the registered webhook
-POST /api/v1/apps/<name>/heartbeat    # uptime ping (X-Service-Secret)
+## Client example
 
-# Admin (requires admin JWT)
-GET/POST/PATCH/DELETE /api/v1/admin/services...
-GET  /api/v1/admin/logs
-GET  /api/v1/admin/heartbeats
+```python
+from examples.meteorbase_client import MeteorBase
+
+mb = MeteorBase(api_key="mb_live_...")
+response = mb.get("oblivion", "/sessions")
+response.raise_for_status()
+print(response.json())
 ```
 
 ## Security model
 
-- **Users** authenticate with Supabase Auth (email, Google, GitHub, OTP).
-- **Machines** authenticate with `X-API-Key` (revocable, expirable, rate-limited).
-- **App access** is scoped via `api_key_service_access` (empty = all apps).
-- **Endpoints** are allowlisted via `service_endpoints` metadata.
-- **Server → app** traffic is authenticated with `X-Internal-Secret` + `X-Service-Secret`.
-- **Admin controls** are enforced server-side from `profiles.role`.
-- `webhook_secret` is column-level locked so the browser can never read it.
+Browser identity is handled by Supabase Auth and Google OAuth. Admin routes accept a Supabase access token, validate its signature using `SUPABASE_JWT_SECRET`, and confirm `profiles.role = 'admin'` from the service-role client.
 
-## Notes
+Machine identity is separate. Clients use hashed, revocable, optionally expiring API keys. Service scopes are enforced by `api_key_service_access`; an empty scope set means all active services. The gateway never forwards the client's API key to a child app. Child apps receive only the private internal secret, their own service secret, the service slug, a generated request ID, and the forwarded user ID.
 
-- Keys generated in the dashboard are stored raw in `api_keys` (hashed/enveloped variants can be
-  added later). Displayed to the user exactly once as `mb_live_...`.
-- The gateway runs in "open mode" for a service until you register its endpoint metadata.
+The proxy rejects unsafe schemes and private or loopback target hosts, disables redirects, strips hop-by-hop response headers, caps request size, applies a per-key in-memory rate limit, and writes request telemetry to Supabase. For a multi-instance deployment, replace the in-memory limiter with a shared Redis or database-backed limiter.
+
+## Repository layout
+
+```text
+app.py                              Flask entrypoint and health routes
+meteorbase/security.py              JWT, API-key hashing, rate limiting
+meteorbase/client.py                user key and scope management
+meteorbase/admin.py                 service registry and admin telemetry
+meteorbase/proxy.py                 secure service proxy and heartbeats
+meteorbase/registry.py               public catalog and current profile
+supabase/schema.sql                  current database schema and RLS
+supabase/migration_secure_keys.sql  raw-key migration for existing installs
+examples/meteorbase_receiver.py     receiver guard for child services
+examples/meteorbase_client.py        consumer SDK wrapper
+docs/INTEGRATION_GUIDE.md            longer integration notes
+templates/index.html                 futuristic landing page
+templates/auth.html                  Supabase Auth and Google sign-in
+templates/dashboard.html             client/admin console
+templates/docs.html                  browser documentation
+```

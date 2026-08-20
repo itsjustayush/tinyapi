@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import time
 from datetime import datetime, timezone
 from hmac import compare_digest
@@ -37,9 +38,14 @@ def _safe_service_url(value: str) -> bool:
             return False
         try:
             address = ip_address(host)
-            return not (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_unspecified)
+            addresses = [address]
         except ValueError:
-            return True
+            try:
+                resolved = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+                addresses = [ip_address(item[4][0]) for item in resolved]
+            except (OSError, ValueError):
+                return False
+        return bool(addresses) and all(not (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_unspecified) for address in addresses)
     except Exception:
         return False
 

@@ -23,7 +23,7 @@ class SecurityHelpersTests(unittest.TestCase):
         self.assertFalse(_safe_service_url("http://127.0.0.1:9000"))
         self.assertFalse(_safe_service_url("http://10.0.0.2"))
         self.assertFalse(_safe_service_url("file:///etc/passwd"))
-        self.assertTrue(_safe_service_url("https://service.example.com"))
+        self.assertTrue(_safe_service_url("https://example.com"))
 
     def test_paths_are_normalized_for_endpoint_comparison(self):
         self.assertEqual(_normalize_path("sessions/"), "/sessions")
